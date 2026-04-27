@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Civil Procedure Quiz Platform - Master your law school exams.">
+    <title>Civil Procedure Mastery | Law Quiz</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+    
+    <!-- CSS -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="glass-header">
+            <div class="logo">
+                <span class="logo-icon">⚖️</span>
+                <h1>CivPro <span class="gold-text">Mastery</span></h1>
+            </div>
+            <nav class="nav-links">
+                <button id="nav-dashboard" class="nav-btn active">Dashboard</button>
+                <button id="nav-quiz" class="nav-btn">Quiz Mode</button>
+            </nav>
+        </header>
+
+        <!-- Main Content -->
+        <main id="main-content">
+            <!-- View: Dashboard (Topic Selection) -->
+            <section id="view-dashboard" class="view active-view fade-in">
+                <div class="dashboard-hero">
+                    <h2>Master Civil Procedure</h2>
+                    <p>Test your knowledge with 100+ fact patterns based on the Federal Rules of Civil Procedure.</p>
+                </div>
+                
+                <div class="stats-overview">
+                    <div class="stat-card glass-card">
+                        <h3 class="stat-value" id="stat-total">0</h3>
+                        <p class="stat-label">Total Questions</p>
+                    </div>
+                    <div class="stat-card glass-card">
+                        <h3 class="stat-value" id="stat-completed">0</h3>
+                        <p class="stat-label">Questions Answered</p>
+                    </div>
+                    <div class="stat-card glass-card">
+                        <h3 class="stat-value" id="stat-score">0%</h3>
+                        <p class="stat-label">Average Score</p>
+                    </div>
+                </div>
+
+                <div class="action-panel">
+                    <button id="btn-start-random" class="btn-primary glow-effect">
+                        Start Random Quiz
+                    </button>
+                </div>
+            </section>
+
+            <!-- View: Quiz Interface -->
+            <section id="view-quiz" class="view fade-in" style="display: none;">
+                <div class="quiz-header">
+                    <div class="progress-container">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="quiz-progress-fill"></div>
+                        </div>
+                        <span class="progress-text" id="quiz-progress-text">Question 1 of 10</span>
+                    </div>
+                    <button id="btn-exit-quiz" class="btn-secondary">Exit Quiz</button>
+                </div>
+
+                <div class="question-container glass-card">
+                    <div class="question-topic" id="q-topic">Personal Jurisdiction</div>
+                    <h3 class="question-text" id="q-text">Loading question...</h3>
+                    
+                    <div class="options-container" id="q-options">
+                        <!-- Options injected by JS -->
+                    </div>
+                </div>
+
+                <!-- Feedback Panel (Hidden initially) -->
+                <div id="feedback-panel" class="feedback-panel glass-card" style="display: none;">
+                    <div class="feedback-header" id="feedback-header">
+                        <!-- Correct/Incorrect badge injected here -->
+                    </div>
+                    <div class="feedback-rationale">
+                        <h4>Rationale:</h4>
+                        <p id="feedback-text"></p>
+                    </div>
+                    <div class="feedback-reading">
+                        <h4>Recommended Reading:</h4>
+                        <p id="feedback-reading"></p>
+                    </div>
+                    <div class="feedback-actions">
+                        <button id="btn-next-question" class="btn-primary">Next Question ➔</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- View: Results Screen -->
+            <section id="view-results" class="view fade-in" style="display: none;">
+                <div class="results-container glass-card">
+                    <h2 class="results-title">Quiz Complete</h2>
+                    
+                    <div class="results-score-circle">
+                        <div class="score-inner" id="final-score">100%</div>
+                    </div>
+                    
+                    <div class="results-stats">
+                        <div class="r-stat">
+                            <span class="r-stat-val" id="r-correct">0</span>
+                            <span class="r-stat-label">Correct</span>
+                        </div>
+                        <div class="r-stat">
+                            <span class="r-stat-val" id="r-incorrect">0</span>
+                            <span class="r-stat-label">Incorrect</span>
+                        </div>
+                    </div>
+                    
+                    <button id="btn-return-home" class="btn-primary">Return to Dashboard</button>
+                </div>
+            </section>
+
+        </main>
+        
+        <!-- Footer -->
+        <footer>
+            <p>&copy; 2026 Civil Procedure Mastery | B.L.A.S.T Protocol Demo</p>
+        </footer>
+    </div>
+
+    <!-- Load Data & Logic -->
+    <script src="data/questions.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
