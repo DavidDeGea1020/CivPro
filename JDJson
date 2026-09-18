@@ -1,0 +1,14 @@
+{
+  "JobTitle": "@{first(body('Get_items')?['value'])?['Title']}",
+  "PayType": "@{first(body('Get_items')?['value'])?['Salary_x002f_Hourly']?['Value']}",
+  "PeopleManagement": "@{if(first(body('Get_items')?['value'])?['People_x0020_Management'], 'Yes', 'No')}",
+  "SalesDesignation": "@{first(body('Get_items')?['value'])?['Sales_x002f_Non_x002d_Sales']?['Value']}",
+  "RelationshipManager": "@{...}",
+  "NMLSRequired": "@{...}",
+  "Purpose": "@{...}",
+  "PrincipalDuties": "@{...}",
+  "EducationRequirements": "@{...}",
+  "WorkExperienceRequirements": "@{...}",
+  "KSAs": "@{...}",
+  "CertificationsLicenses": "@{...}"
+}
