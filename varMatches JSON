@@ -1,0 +1,5 @@
+{
+  "jobCode": "@{first(body('FindItemDesc'))?['Job_x0020_Code']}",
+  "jobTitle": "@{first(body('FindItemDesc'))?['Title']}",
+  "purposeSnippet": "@{if(greater(length(coalesce(first(body('FindItemDesc'))?['Purpose'], '')), 80), concat(substring(first(body('FindItemDesc'))?['Purpose'], 0, 80), '…'), coalesce(first(body('FindItemDesc'))?['Purpose'], ''))}"
+}
