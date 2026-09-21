@@ -1,5 +1,5 @@
 # Build Guide: "Update or View Job Description" Topic
-**JD Expert Agent · Microsoft Copilot Studio (classic experience)**
+**JD Expert Agent · Microsoft Copilot Studio (classic experience)** · v1.1
 **Audience:** teammate taking over the topic build · **Follow in order, top to bottom.**
 
 ---
@@ -103,6 +103,7 @@ Create variables as you reach them. This table is for checking your work.
 | `varAskText` | Topic | String | What the agent says when asking for the next input |
 | `varUserReply` | Topic | String | The user's latest free-text reply |
 | `recProposal` | Topic | Record | Prompt output for the latest reply |
+| `varPromptText` | Topic | String | Only if the prompt returns text (Step 18) |
 | `varLoopCount` | Topic | Number | Stops an endless change loop |
 | `varProposalChoice` | Topic | String | Apply / Revise / Discard |
 | `varDiscardConfirm` | Topic | String | Yes / No when discarding changes |
@@ -172,7 +173,7 @@ STEP 1 — DECIDE THE STATUS (pick exactly one)
 - "no_change": the user asked for a change that is already reflected in the draft.
 - "show_draft": the user wants to see the current job description or draft.
 - "done": the user is finished, wants to submit or send it, or was only viewing (for example "that's all", "send it to HR", "no thanks", "I'm good").
-- "new_search": the user wants to look at a different job.
+- "new_search": the user wants to look at a different job. If they name or describe the other job, put it in search_text.
 - "cancel": the user wants to discard or cancel their changes.
 - "general_question": the user is asking a question rather than requesting a change (for example "what counts as people management?" or "would that make it exempt?").
 If a message contains a change AND a phrase like "that's all", use "applied".
@@ -202,24 +203,66 @@ RULES FOR EVERY STATUS
 - For "needs_clarification", put one specific question in clarifying_question.
 - Never mention or ask about job codes, grades, pay ranges, or job description status.
 - Each entry in changes describes one field: field (the JSON key), label (the field's plain name, such as "Principal duties and responsibilities"), before (full previous value), after (full new value), summary (one plain-language sentence describing the change).
+- Each entry in review_flags is an object with one property, "flag", containing a short plain-language note for HR. Return an empty list if there are no flags.
+- For "new_search", put the job title or description the user mentioned in search_text, or leave it empty if they did not mention one. For every other status, leave search_text empty.
 
 Return only JSON in this exact shape, with no other text:
 {
   "status": "",
   "clarifying_question": "",
+  "search_text": "",
   "updated_jd": {},
   "changes": [ { "field": "", "label": "", "before": "", "after": "", "summary": "" } ],
-  "review_flags": [ "" ]
+  "review_flags": [ { "flag": "" } ]
 }
 ```
 
-6. **Output format:** set the prompt's output to **JSON** if the option exists. In the example output, paste the JSON shape above **with your real `JDJson` sample inside `updated_jd`**, so the output structure has all twelve fields typed correctly.
+6. **Output format:** set the prompt's output to **JSON** if the option exists, and paste an example output. Use the structure below, but replace the `updated_jd` object with **your real `JDJson` sample** so all twelve fields are typed correctly.
+
+   Rules for the example, or the editor will reject it or type fields wrongly:
+   - **Fill every field with a realistic value.** Don't leave strings empty or lists empty; the editor infers types from the values.
+   - **Every list must contain objects, not plain strings.** `review_flags` is a list of `{ "flag": "..." }` objects for this reason. A list of plain strings causes a "Primitive arrays are not supported" error.
+
+```json
+{
+  "status": "applied",
+  "clarifying_question": "Which duty would you like removed?",
+  "search_text": "Loan Officer",
+  "updated_jd": {
+    "JobTitle": "Payroll Specialist II",
+    "PayType": "Hourly",
+    "PeopleManagement": "No",
+    "SalesDesignation": "Non-Sales",
+    "RelationshipManager": "No",
+    "NMLSRequired": "No",
+    "Purpose": "Processes semi-monthly payroll for the bank.",
+    "PrincipalDuties": "Processes payroll\nReconciles payroll accounts\nPrepares quarterly payroll audit reports",
+    "EducationRequirements": "High school diploma or equivalent",
+    "WorkExperienceRequirements": "2 years of payroll experience",
+    "KSAs": "Knowledge of payroll regulations",
+    "CertificationsLicenses": "None"
+  },
+  "changes": [
+    {
+      "field": "PrincipalDuties",
+      "label": "Principal duties and responsibilities",
+      "before": "Processes payroll\nReconciles payroll accounts",
+      "after": "Processes payroll\nReconciles payroll accounts\nPrepares quarterly payroll audit reports",
+      "summary": "Added preparing quarterly payroll audit reports to the duties."
+    }
+  ],
+  "review_flags": [
+    { "flag": "Duties expanded; HR may want to confirm the job's level." }
+  ]
+}
+```
 7. **Test the prompt** in the prompt editor with your sample `JDJson` and a few messages:
    - "Add 'Prepare quarterly payroll audit reports' to the duties" → `applied`
    - "Remove the last one" → `needs_clarification`
    - "Show me the draft" → `show_draft`
    - "That's all" → `done`
    - "What counts as people management?" → `general_question`
+   - "Actually, show me the Loan Officer JD" → `new_search` with `search_text` = "Loan Officer"
 8. Save.
 
 > **ALM note:** whenever this prompt is edited in DEV, republish the agent before exporting the solution. Skipping this causes a solution import dependency failure in UAT/QA.
@@ -268,6 +311,7 @@ Directly under the trigger:
 
 1. **Topic management → Redirect to another topic** (or **Go to another topic**) → **JD Draft Reset**
 2. **Set a variable value:** `Topic.varSearchAttempts` = `0`
+3. **Set a variable value:** `Topic.varLoopCount` = `0` (created here so later formulas can reference it)
 
 > The resume check (Step 32) will be inserted **above** these two nodes at the end of the build. Leave room at the top.
 
@@ -355,6 +399,12 @@ Several close matches → Step 10.
 ## Step 10. List close matches and let the user choose (Branch 3)
 
 Inside Branch 3:
+
+0. **Condition (loop guard):** `Topic.varSearchAttempts >= 4`
+   - **True:** Send a message *"I'm having trouble narrowing that down. Your HR Business Partner can help you find the right job."* → **End current topic**
+   - **All other conditions:** empty, continue below
+
+   Without this, a user who keeps getting several matches could loop forever, since Branch 1's limit only applies when nothing is found.
 
 1. **Send a message.** Switch the message text to **formula** mode and paste:
 
@@ -509,15 +559,15 @@ Step 19 ─ Branch on status                       │
 
 ## Step 18. Interpret the reply with the prompt
 
-1. Set **`Topic.varLoopCount`** = `Topic.varLoopCount + 1` (create as Number; it starts blank, which Power Fx treats as 0)
+1. **Set a variable value:** `Topic.varLoopCount` = `Topic.varLoopCount + 1`
 2. **Condition:** `Topic.varLoopCount > 25`
-   - **True:** Send a message *"That's a lot of back and forth. Let's wrap up what you have."* → **Go to step** → Step 26
+   - **True:** Send a message *"That's a lot of back and forth. Let's wrap up what you have."* Step 26 doesn't exist yet, so **leave the Go to step off for now**; you'll add it at the end of Step 26.
    - **All other conditions:** empty
 3. **+ → Call an action → Apply JD Changes** (the prompt from Step 2)
    - `CurrentJD` = `Global.varWorkingJDJson`
    - `UserMessage` = `Topic.varUserReply`
    - Save output to new variable `Topic.recProposal`
-4. **If the output comes back as text** (not a record), add a **Parse value** node: parse the prompt's text output, data type **From sample data** using the JSON shape from Step 2 with your `JDJson` inside `updated_jd`, and save as `Topic.recProposal`.
+4. **If the output comes back as text** (not a record): in item 3, save the output to `Topic.varPromptText` instead, then add a **Parse value** node that parses `Topic.varPromptText`, data type **From sample data** using the full example output from Step 2 item 6, saved as `Topic.recProposal`. (Parsing into the same variable the text came from would cause a type conflict.)
 
 Rename step 3's node `S18 Prompt` if you can.
 
@@ -577,7 +627,7 @@ Concat(Topic.recProposal.changes,
   Char(10) & Char(10)) &
 If(IsEmpty(Topic.recProposal.review_flags), "",
   Char(10) & Char(10) & "**HR will review:**" & Char(10) &
-  Concat(Topic.recProposal.review_flags, "⚠️ " & ThisRecord.Value, Char(10)))
+  Concat(Topic.recProposal.review_flags, "⚠️ " & ThisRecord.flag, Char(10)))
 ```
 
 2. **Question:**
@@ -596,7 +646,7 @@ If(IsEmpty(Topic.recProposal.review_flags), "",
 2. **Parse value:** parse `Global.varWorkingJDJson`, **same sample as Step 14**, save to `Global.varWorkingJD`
 3. `Global.varHasChanges` = `true`
 4. `Global.varChangeLogText` = `Global.varChangeLogText & Concat(Topic.recProposal.changes, "• " & ThisRecord.summary, Char(10)) & Char(10)`
-5. `Global.varReviewFlagsText` = `Global.varReviewFlagsText & Concat(Topic.recProposal.review_flags, "• " & ThisRecord.Value, Char(10)) & If(IsEmpty(Topic.recProposal.review_flags), "", Char(10))`
+5. `Global.varReviewFlagsText` = `Global.varReviewFlagsText & Concat(Topic.recProposal.review_flags, "• " & ThisRecord.flag, Char(10)) & If(IsEmpty(Topic.recProposal.review_flags), "", Char(10))`
 6. `Topic.varAskText` = `"Added to your draft. Anything else? Describe another change, say \"show my draft\", or say you're done."`
 7. **Go to step** → Step 17 Question node
 
@@ -639,10 +689,12 @@ Inside Branch 6:
      - **Condition:** `Topic.varDiscardConfirm = "No"` → Set `Topic.varAskText` = `"Okay, keeping your draft. Anything else?"` → **Go to step** → Step 17 Question node
    - **All other conditions:** empty
 2. **Redirect to JD Draft Reset**
-3. Set `Topic.JobSearchText` = `Blank()`
+3. Set `Topic.JobSearchText` = `Topic.recProposal.search_text` (the job they asked for, if they named one; blank otherwise)
 4. Set `Topic.varSearchAttempts` = `0`
 5. Set `Topic.varLoopCount` = `0`
 6. **Go to step** → the Step 6 condition
+
+If the user said "actually, show me the Loan Officer JD", the search runs for "Loan Officer" straight away. If they just said "a different job", `search_text` is blank and Step 6 asks which one.
 
 ## Step 25. Cancel changes (cancel)
 
@@ -666,6 +718,8 @@ Inside Branch 8. Rename this first node `S26 Done` if you can, since Step 18's l
   - **Redirect to JD Draft Reset**
   - **End current topic**
 - **All other conditions:** continue to Step 27
+
+**Now go back to Step 18's loop guard** and add **Go to step** → this Step 26 condition at the end of its True branch.
 
 ---
 
@@ -788,10 +842,10 @@ Open the test pane and watch the variables panel as you go. Start a **new conver
 | 10 | "make it part-time" | Asks which allowed Salary/Hourly value |
 | 11 | "add supervising two analysts to the duties" | People management flag |
 | 12 | "what counts as people management?" | Knowledge answer, then back to "describe a change" |
-| 13 | "actually, a different job" with changes applied | Discard confirmation, then back to search |
+| 13 | "actually, show me the [other title] JD" with changes applied | Discard confirmation, then searches for that job directly |
 | 14 | "that's all" with no changes | Friendly close |
 | 15 | "that's all" with changes | Summary and submit confirmation |
-| 16 | Submit, then say "submit" again | "Already submitted" (no second request) |
+| 16 | Submit, then say "submit that again" | No second change request is created |
 | 17 | "cancel my changes" | Discard confirmation, then close |
 | 18 | "What's the job code / grade for this?" | Declines, points to HRBP |
 
@@ -818,6 +872,8 @@ The test pane and Teams / Microsoft 365 Copilot render differently. **Publish th
 | "Required parameter … is blank" on a flow call | A variable was never set. Check `Topic.` vs `Global.` scope, and that no branch falls through instead of jumping |
 | Flow isn't listed in Call an action | Not in the same solution, or turned off. Save, turn on, refresh |
 | Type error when assigning to `Global.varWorkingJD` | The Parse value samples in Steps 14 and 21 differ. Use the identical sample |
+| "Primitive arrays are not supported" on the prompt's example output | A list in the example contains plain strings. Every list item must be an object, e.g. `{ "flag": "..." }` |
+| Go to step can't find its target | The target node hasn't been built yet. The guide notes where to come back and add jumps (Steps 18 and 26) |
 | Prompt returns the wrong status | Test in the prompt editor with the exact message; adjust the status descriptions in Step 2 |
 | Prompt changes fields the user didn't mention | Re-check rule 1 in Step 2 is intact; test with a simple one-field request |
 | Agent answers twice after a general question | Knowledge was added to the Generative answers node. Remove it and use agent-level knowledge only |
