@@ -1,0 +1,12 @@
+Concat(
+  Split(Global.SelectedSections, ","),
+  Switch(Value,
+    "Purpose", "Purpose",
+    "PrincipalDuties", "Principal Duties",
+    "Education", "Education",
+    "WorkExperience", "Work Experience",
+    "Certifications", "Certifications",
+    "KSA", "KSAs",
+    Value),
+  ", "
+)
