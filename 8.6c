@@ -1,0 +1,6 @@
+{
+  PeopleManagement: If(IsBlank(Text(Topic.R.pm_check)), Global.PendingChecks.PeopleManagement, Text(Topic.R.pm_check)),
+  SalesNonSales: If(IsBlank(Text(Topic.R.sales_check)), Global.PendingChecks.SalesNonSales, Text(Topic.R.sales_check)),
+  RelationshipManager: If(IsBlank(Text(Topic.R.rm_check)), Global.PendingChecks.RelationshipManager, Text(Topic.R.rm_check)),
+  NMLS: If(IsBlank(Text(Topic.R.nmls_check)), Global.PendingChecks.NMLS, Text(Topic.R.nmls_check))
+}
