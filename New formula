@@ -1,0 +1,4 @@
+"Update started for " & Global.OriginalJD.Title &
+". Cards completed. Sections selected: " & Topic.SectionList &
+". Reasons: " & Global.UpdateReasons &
+". Next step: show the first selected section."
