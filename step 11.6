@@ -1,0 +1,11 @@
+"**Job:** " & Global.OriginalJD.Title & Char(10) & Char(10) &
+"**Sections changed:** " & Topic.SectionsChanged & Char(10) & Char(10) &
+"**Reasons:** " & Global.UpdateReasons &
+  If(IsBlank(Global.OtherReason), "", " — " & Global.OtherReason) & Char(10) & Char(10) &
+If(IsBlank(Topic.IndirectConfirmations) || Topic.IndirectConfirmations = "None", "",
+  "**For HR review:** " & Topic.IndirectConfirmations & Char(10) & Char(10)) &
+If(IsBlank(Global.HardStopLog), "",
+  "**Noted for HR (not changed):**" & Global.HardStopLog & Char(10) & Char(10)) &
+If(Global.TitleReviewRequested,
+  "**Title review:** Proposed """ & Topic.ProposedTitle & """. " & Topic.TitleJustification & Char(10) & Char(10), "") &
+If(Boolean(Topic.F.level_match), "**One thing to consider:** " & Text(Topic.F.level_recommendation), "")
