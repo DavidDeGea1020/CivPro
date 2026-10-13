@@ -1,0 +1,8 @@
+If(
+  IsBlank(Global.SelectedSections),
+  "Got it, I've noted a title review for " & Global.OriginalJD.Title &
+    ". Title reviews are submitted along with job description changes, so which section would you like to update first?",
+  "Got it, let's update " & Global.OriginalJD.Title & ". We'll work through: " & Topic.SectionList &
+    If(Global.TitleReviewRequested, ", and I'll include a title review when you submit", "") &
+    ". You can ask questions or add sections anytime."
+)
