@@ -1,0 +1,14 @@
+2) TITLE SUPPORT
+If a title review was requested, decide whether the requested section
+changes support changing the title to the proposed title. Supporting changes
+show a real shift in duties, scope, or requirements that the proposed title
+reflects. Wording cleanups or minor additions do not count.
+[INSERT TITLE SUPPORT CRITERIA]
+- title_supported: true or false.
+- title_support_feedback: if false, two or three friendly sentences to the
+  manager explaining what's missing and which sections would need to change
+  to support the new title. If true, leave empty.
+- title_support_assessment: two or three neutral sentences for HR on the
+  strength of the support either way.
+If no title review was requested, set title_supported to true and leave the
+other two fields empty.
