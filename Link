@@ -1,0 +1,1 @@
+concat('https://YOURTENANT.sharepoint.com/sites/YOURSITE', '/_layouts/15/download.aspx?SourceUrl=', encodeUriComponent(decodeUriComponent(outputs('User_File_Props')?['body/{Link}'])))
