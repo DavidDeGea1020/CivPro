@@ -656,43 +656,151 @@ All of these go **below** the Apply Blocks loop, not inside it.
    ```
 4. **+** → **Set variable** → **Html** → `outputs('After_Reasons')`
 
-#### 7.3b Sections, flags and impact cards
+#### 7.3b Sections, flag chips and impact cards
 
-Repeat the same four steps three more times, using the names and Map expressions below. In the Snippet and After expressions, change only the marker name (`Reason` → `Section`, `FlagChip` or `Indirect`) and the action names.
+Three more repeats, built exactly like 7.3a: 4 actions each, 12 in total. All of them go on the **main line**, directly below the **Set variable** that ends 7.3a, **not** inside the Apply Blocks loop. Build them in this order: Sections, Flag chips, Impact cards.
 
-| | Sections | Flag chips | Impact cards |
-|---|---|---|---|
-| Marker name | `Section` | `FlagChip` | `Indirect` |
-| 1. Compose | `Section Snippet` | `Flag Snippet` | `Impact Snippet` |
-| 2. Select | `Section Html`, From `body('Section_List')` | `Flag Html`, From `outputs('FlagChips')` | `Impact Html`, From `body('Indirect_Items')` |
-| 3. Compose | `After Sections` | `After Flags` | `After Impacts` |
-| 4. Set variable | Html = `outputs('After_Sections')` | Html = `outputs('After_Flags')` | Html = `outputs('After_Impacts')` |
+> **Entering expressions:** click into the field → click the **fx** icon (new designer) or the **Expression** tab (classic designer) → paste → **Add** (or **OK**).
+> **Renaming:** click the action's title (or **⋯** → **Rename**), type the new name, press **Enter**. Rename **before** you reference an action anywhere else.
 
-**Map (text mode) for each Select:**
+---
 
-Section Html:
+##### Sections (4 actions)
+
+**Action 1: Section Snippet**
+1. Below the last **Set variable** from 7.3a, click **+** → **Add an action**.
+2. Search `Compose` → choose **Compose** (Data Operation).
+3. Rename it `Section Snippet`.
+4. Click **Inputs** → **Expression** → paste:
+   ```
+   if(contains(variables('Html'), '<!--REPEAT:Section-->'), first(split(last(split(variables('Html'), '<!--REPEAT:Section-->')), '<!--/REPEAT:Section-->')), '')
+   ```
+5. **Add**.
+
+**Action 2: Section Html**
+1. Below **Section Snippet**: **+** → **Add an action** → search `Select` → choose **Select** (Data Operation).
+2. Rename it `Section Html`.
+3. Click **From** → **Expression** → paste `body('Section_List')` → **Add**.
+4. On **Map**, click the **Switch Map to text mode** icon (the **T** on the right of the Map rows). The two key/value boxes become one box.
+5. Click that box → **Expression** → paste:
+   ```
+   replace(outputs('Section_Snippet'), '{{Section}}', replace(replace(replace(trim(item()), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'))
+   ```
+6. **Add**.
+
+**Action 3: After Sections**
+1. Below **Section Html**: **+** → **Add an action** → **Compose**.
+2. Rename it `After Sections`.
+3. **Inputs** → **Expression** → paste:
+   ```
+   if(contains(variables('Html'), '<!--REPEAT:Section-->'), concat(first(split(variables('Html'), '<!--REPEAT:Section-->')), join(body('Section_Html'), ''), last(split(variables('Html'), '<!--/REPEAT:Section-->'))), variables('Html'))
+   ```
+4. **Add**.
+
+**Action 4: Set variable (Html)**
+1. Below **After Sections**: **+** → **Add an action** → search `Set variable` → choose **Set variable** (Variable).
+2. Rename it `Set Html After Sections` (optional, but it keeps the run history readable).
+3. **Name:** pick **Html** from the dropdown.
+4. **Value** → **Expression** → `outputs('After_Sections')` → **Add**.
+
+---
+
+##### Flag chips (4 actions)
+
+**Action 1: Flag Snippet**
+1. Below **Set Html After Sections**: **+** → **Add an action** → **Compose**.
+2. Rename it `Flag Snippet`.
+3. **Inputs** → **Expression** → paste:
+   ```
+   if(contains(variables('Html'), '<!--REPEAT:FlagChip-->'), first(split(last(split(variables('Html'), '<!--REPEAT:FlagChip-->')), '<!--/REPEAT:FlagChip-->')), '')
+   ```
+4. **Add**.
+
+**Action 2: Flag Html**
+1. Below **Flag Snippet**: **+** → **Add an action** → **Select**.
+2. Rename it `Flag Html`.
+3. **From** → **Expression** → `outputs('FlagChips')` → **Add**.
+4. **Map** → **Switch Map to text mode** (**T**).
+5. Click the box → **Expression** → paste:
+   ```
+   replace(outputs('Flag_Snippet'), '{{FlagChip}}', replace(replace(replace(string(item()), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'))
+   ```
+6. **Add**.
+
+**Action 3: After Flags**
+1. Below **Flag Html**: **+** → **Add an action** → **Compose**.
+2. Rename it `After Flags`.
+3. **Inputs** → **Expression** → paste:
+   ```
+   if(contains(variables('Html'), '<!--REPEAT:FlagChip-->'), concat(first(split(variables('Html'), '<!--REPEAT:FlagChip-->')), join(body('Flag_Html'), ''), last(split(variables('Html'), '<!--/REPEAT:FlagChip-->'))), variables('Html'))
+   ```
+4. **Add**.
+
+**Action 4: Set variable (Html)**
+1. Below **After Flags**: **+** → **Add an action** → **Set variable**.
+2. Rename it `Set Html After Flags`.
+3. **Name:** **Html**.
+4. **Value** → **Expression** → `outputs('After_Flags')` → **Add**.
+
+---
+
+##### Impact cards (4 actions)
+
+**Action 1: Impact Snippet**
+1. Below **Set Html After Flags**: **+** → **Add an action** → **Compose**.
+2. Rename it `Impact Snippet`.
+3. **Inputs** → **Expression** → paste:
+   ```
+   if(contains(variables('Html'), '<!--REPEAT:Indirect-->'), first(split(last(split(variables('Html'), '<!--REPEAT:Indirect-->')), '<!--/REPEAT:Indirect-->')), '')
+   ```
+4. **Add**.
+
+**Action 2: Impact Html**
+1. Below **Impact Snippet**: **+** → **Add an action** → **Select**.
+2. Rename it `Impact Html`.
+3. **From** → **Expression** → `body('Indirect_Items')` → **Add**.
+4. **Map** → **Switch Map to text mode** (**T**).
+5. Click the box → **Expression** → paste (one line). The values were already escaped in 6.6, so they go in as they are:
+   ```
+   replace(replace(replace(replace(replace(replace(replace(outputs('Impact_Snippet'), '{{ImpactField}}', item()?['field']), '{{ImpactCurrent}}', item()?['current']), '{{ImpactEvidence}}', item()?['evidence']), '{{ImpactAnswer}}', item()?['answer']), '{{ImpactStatus}}', item()?['status']), '{{ImpactCardBg}}', if(equals(item()?['status'], 'Confirmed'), '#FFF6DB', '#FFFFFF')), '{{ImpactChipBg}}', if(equals(item()?['status'], 'Confirmed'), '#8A4B00', if(equals(item()?['status'], 'Manager says no'), '#5F6368', '#7A5200')))
+   ```
+6. **Add**.
+
+**Action 3: After Impacts**
+1. Below **Impact Html**: **+** → **Add an action** → **Compose**.
+2. Rename it `After Impacts`.
+3. **Inputs** → **Expression** → paste:
+   ```
+   if(contains(variables('Html'), '<!--REPEAT:Indirect-->'), concat(first(split(variables('Html'), '<!--REPEAT:Indirect-->')), join(body('Impact_Html'), ''), last(split(variables('Html'), '<!--/REPEAT:Indirect-->'))), variables('Html'))
+   ```
+4. **Add**.
+
+**Action 4: Set variable (Html)**
+1. Below **After Impacts**: **+** → **Add an action** → **Set variable**.
+2. Rename it `Set Html After Impacts`.
+3. **Name:** **Html**.
+4. **Value** → **Expression** → `outputs('After_Impacts')` → **Add**.
+
+5. **Save** the flow.
+
+---
+
+##### Check it
+
+After 7.3a and 7.3b, the main line of the flow reads:
+
 ```
-replace(outputs('Section_Snippet'), '{{Section}}', replace(replace(replace(trim(item()), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'))
+Reason Snippet → Reason Html → After Reasons → Set variable
+Section Snippet → Section Html → After Sections → Set Html After Sections
+Flag Snippet → Flag Html → After Flags → Set Html After Flags
+Impact Snippet → Impact Html → After Impacts → Set Html After Impacts
 ```
 
-Flag Html:
-```
-replace(outputs('Flag_Snippet'), '{{FlagChip}}', replace(replace(replace(string(item()), '&', '&amp;'), '<', '&lt;'), '>', '&gt;'))
-```
-
-Impact Html (values were already escaped in 6.6):
-```
-replace(replace(replace(replace(replace(replace(replace(outputs('Impact_Snippet'), '{{ImpactField}}', item()?['field']), '{{ImpactCurrent}}', item()?['current']), '{{ImpactEvidence}}', item()?['evidence']), '{{ImpactAnswer}}', item()?['answer']), '{{ImpactStatus}}', item()?['status']), '{{ImpactCardBg}}', if(equals(item()?['status'], 'Confirmed'), '#FFF6DB', '#FFFFFF')), '{{ImpactChipBg}}', if(equals(item()?['status'], 'Confirmed'), '#8A4B00', if(equals(item()?['status'], 'Manager says no'), '#5F6368', '#7A5200')))
-```
-
-**Example: Flag Snippet** (Compose 1 for flag chips):
-```
-if(contains(variables('Html'), '<!--REPEAT:FlagChip-->'), first(split(last(split(variables('Html'), '<!--REPEAT:FlagChip-->')), '<!--/REPEAT:FlagChip-->')), '')
-```
-**Example: After Flags** (Compose 3 for flag chips):
-```
-if(contains(variables('Html'), '<!--REPEAT:FlagChip-->'), concat(first(split(variables('Html'), '<!--REPEAT:FlagChip-->')), join(body('Flag_Html'), ''), last(split(variables('Html'), '<!--/REPEAT:FlagChip-->'))), variables('Html'))
-```
+In a test run:
+- **Section Html** output is a list with one chip of HTML per section.
+- For a request with **no flags**, **Flag Snippet** is empty and **Flag Html** is an empty list. That's expected: the Flags block was removed in 7.2, so the guard leaves Html alone.
+- For a request with **no indirect impacts**, the same is true for **Impact Snippet** and **Impact Html**.
+- If the email comes out doubled, one of the Snippet or After expressions is missing its `contains(...)` check. Compare it with the expressions above.
 
 ### 7.4 Fill the placeholders
 
