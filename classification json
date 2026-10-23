@@ -1,0 +1,10 @@
+{
+  "Job Code": "@{...}",
+  "Grade": "@{...}",
+  "Salary Type": "@{...}",
+  "Status": "@{...}",
+  "People Management": "@{...}",
+  "Sales/Non-Sales": "@{...}",
+  "Relationship Manager": "@{...}",
+  "NMLS Required": "@{...}"
+}
