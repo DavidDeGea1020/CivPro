@@ -1,0 +1,14 @@
+With(
+  {
+    Items: Filter(
+      Table(
+        {F: "People Management", E: Global.PendingChecks.PeopleManagement},
+        {F: "Sales/Non-Sales", E: Global.PendingChecks.SalesNonSales},
+        {F: "Relationship Manager", E: Global.PendingChecks.RelationshipManager},
+        {F: "NMLS Required", E: Global.PendingChecks.NMLS}
+      ),
+      !IsBlank(E)
+    )
+  },
+  If(CountRows(Items) = 0, "None", Concat(Items, F & ": " & E, Char(10)))
+)
