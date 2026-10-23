@@ -1,0 +1,1 @@
+   coalesce(body('Get_Requester')?['displayName'], body('Get_Request')?['RequestedBy'])
