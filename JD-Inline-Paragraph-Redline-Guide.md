@@ -1,7 +1,9 @@
-# Inline Paragraph Redline: Build Guide
+# Inline Paragraph Redline: Build Guide (v2: inline slots)
+
+**Replaces** the earlier version of this guide (hidden paragraph marks). That approach showed each piece on its own line in Word for the web. This version uses ordinary inline fields, which display the same in Word desktop, Word for the web and PDF. If you followed any of the earlier version's Part 2, see [Appendix E](#appendix-e--undoing-the-earlier-version).
 
 **Builds on:** the JD Change Document feature (Build Redline Rows child flow, Save JD Update Request flow, JD Change Template - User / - HR), including the quote and space normalization (`OriginalNorm` / `ProposedNorm`).
-**Goal:** when a manager edits a paragraph section like **Purpose**, the change document marks only what changed: added words in bold yellow, removed words in red strikethrough, everything else plain. It stays one flowing paragraph instead of striking out the whole old paragraph and adding the whole new one.
+**Goal:** when a manager edits **Purpose**, the change document marks only what changed (added words bold yellow, removed words red strikethrough, everything else plain) in one flowing paragraph.
 
 **Before:**
 > ~~Provides service to consumer clients. Processes deposits accurately. Refers clients to specialists. Works as a team.~~ **Provides service to consumer and small business clients. Processes deposits accurately. Works as a team. Manages a portfolio of 40 clients.**
@@ -9,226 +11,239 @@
 **After:**
 > Provides service to consumer **and small business** clients. Processes deposits accurately. ~~Refers clients to specialists.~~ Works as a team. **Manages a portfolio of 40 clients.**
 
-> **No changes to the HR review email.** The email only reads the document's link, file ID and name. The redline legend in the email stays accurate because the same three styles are used.
+> **No changes to the HR review email.** It only reads the document's link, file ID and name. The legend stays accurate because the same two redline styles are used.
+
+**Comes with:** `verify_purpose_slots.py`, which checks that a template has the 16 Purpose fields named, ordered and styled correctly (Part 1.6).
 
 ---
 
 ## Contents
 
 0. [How it works](#part-0--how-it-works)
-1. [Check that Word for the web shows it correctly (5 minutes)](#part-1--check-that-word-for-the-web-shows-it-correctly)
-2. [Templates: make the Purpose row flow inline](#part-2--templates-make-the-purpose-row-flow-inline)
-3. [Child flow: new input and variables](#part-3--child-flow-new-input-and-variables)
-4. [Child flow: the Paragraph branch](#part-4--child-flow-the-paragraph-branch)
-5. [Child flow: return the right rows](#part-5--child-flow-return-the-right-rows)
+1. [Templates: replace the Purpose row with 16 inline slots](#part-1--templates-replace-the-purpose-row-with-16-inline-slots)
+2. [Child flow: new input and variables](#part-2--child-flow-new-input-and-variables)
+3. [Child flow: compare sentences and words](#part-3--child-flow-compare-sentences-and-words)
+4. [Child flow: fill the slots](#part-4--child-flow-fill-the-slots)
+5. [Child flow: return the result](#part-5--child-flow-return-the-result)
 6. [Test the child flow on its own](#part-6--test-the-child-flow-on-its-own)
-7. [Parent flow: turn on Paragraph mode for Purpose](#part-7--parent-flow-turn-on-paragraph-mode-for-purpose)
+7. [Parent flow: wire Purpose to the slots](#part-7--parent-flow-wire-purpose-to-the-slots)
 8. [End-to-end tests](#part-8--end-to-end-tests)
-- [Appendix A — Using it on other sections](#appendix-a--using-it-on-other-sections)
+- [Appendix A — Other paragraph sections](#appendix-a--other-paragraph-sections)
 - [Appendix B — Name reference](#appendix-b--name-reference)
 - [Appendix C — Troubleshooting](#appendix-c--troubleshooting)
+- [Appendix D — Spec for the template agent](#appendix-d--spec-for-the-template-agent)
+- [Appendix E — Undoing the earlier version](#appendix-e--undoing-the-earlier-version)
 
 ---
 
 ## Part 0 — How it works
 
 ```
-Build Redline Rows (child flow)
-  Inputs: Original, Proposed, Mode (NEW, optional)
-  ├─ existing line-by-line comparison → AllRows               (unchanged)
-  └─ Condition: Mode = "Paragraph"?
-       ├─ Yes: 1. Flatten each version into one line
-       │       2. Split into sentences
-       │       3. Find sentences that are in both (anchors)
-       │       4. Between anchors: removed sentences / added sentences ("gaps")
-       │       5. Inside each gap: trim the words that match at the start
-       │          and end, so only the changed words are marked
-       │       6. Output rows in reading order: Kept / Removed / Added / Kept…
-       └─ No:  use AllRows, exactly as today
-  Respond: Rows
+Template: Purpose is ONE paragraph of 16 inline fields
+  [K1][R1][A1] [K2][R2][A2] [K3][R3][A3] [K4][R4][A4] [K5][R5][A5] [KEnd]
+   K = kept text (plain)   R = removed (red strike)   A = added (bold yellow)
+  Unused fields stay empty and invisible.
 
-Template: the Purpose row's paragraph mark is formatted as Hidden,
-so the rows Word repeats run together as one paragraph.
+Build Redline Rows (child flow), Mode = "Paragraph"
+  1. Flatten both versions to one line, split into sentences
+  2. Sentences in both versions = anchors (unchanged)
+  3. Between anchors: removed sentences / added sentences ("gaps")
+  4. In each gap, trim matching words at the start and end,
+     leaving only the changed words
+  5. Each changed spot fills one slot: K = kept text before it, R = removed, A = added
+  6. Kept text after the last change → KEnd
+  7. Return {"slots": [5 × {k, r, a}], "end": "..."}
+Mode blank → the line-by-line rows, exactly as today (all other sections)
+
+Save JD Update Request
+  Purpose Slots (Compose) = json(rows from Redline Purpose)
+  Populate User / HR Doc: PurposeK1 … PurposeKEnd ← Purpose Slots
 ```
 
-**Why the template change is needed:** each row Word repeats is its own paragraph. Today Purpose fits in one row, so that doesn't matter. With word-level changes, Purpose becomes several rows (kept, added, kept, removed…). Hiding the row's paragraph mark makes Word run those rows together on one line. It's the same trick Word uses for its built-in "style separator".
+**Five slots = five separate changed spots.** Changes next to each other (or in the same sentence) share one slot. A typical Purpose edit uses one or two. If a manager makes **six or more separate edits**, the paragraph falls back to showing the old text struck through and the new text added, which is how it works today.
 
-**Why the output rows don't change shape:** Paragraph mode returns the same `Kept` / `Added` / `Removed` rows as today, just more of them. **Rows Purpose**, the Populate mappings and everything downstream stay the same.
+**What it handles:** words added, removed or changed inside a sentence; sentences added, removed or inserted anywhere; several separate edits; a brand-new Purpose; an unchanged Purpose.
 
-**What it handles**
-- Words added, removed or changed inside a sentence
-- Sentences added, removed or inserted anywhere
-- Several separate edits in different sentences
-- A brand-new Purpose (all added) and an unchanged Purpose (all plain)
+**Known limits:**
+- **Moved or duplicated sentences** fall back to one changed spot covering just the part that differs.
+- **Two edits inside the same sentence** show as one removed/added pair spanning both.
+- **Bullet sections** (Principal Duties, KSAs, Certifications) keep the line-by-line comparison.
 
-**What it doesn't do**
-- **Moved or duplicated sentences:** if sentences are reordered, or the same sentence appears twice, it falls back to one changed block covering just the part that differs. The words that match at the start and end are still trimmed.
-- **Two edits inside the same sentence** (e.g. a word changed at the start and another at the end): everything between them is shown as one removed/added pair.
-- **Bullet sections** (Principal Duties, KSAs) keep the line-by-line comparison. Leave Mode blank for them.
-
-All of this was checked against 12 test edits with a simulation that uses only the expressions below. Every result rebuilt both the original and the proposed text exactly.
+The expressions in this guide were tested offline before writing it, with a simulation that uses only the functions shown here. All 12 test edits rebuilt both the original and the proposed text exactly, with no double spaces. The 5-edit maximum and the 6-edit fallback were tested too. A filled sample template was rendered to confirm the result reads as one paragraph.
 
 ---
 
-## Part 1 — Check that Word for the web shows it correctly
+## Part 1 — Templates: replace the Purpose row with 16 inline slots
 
-Do this quick check before building anything. It confirms that the hidden paragraph mark trick displays correctly in Word for the web, which is where HR's **Open in Word** button goes.
+Do this in **both** templates: `JD Change Template - User.docx` and `JD Change Template - HR.docx`. Build it once in the User template, then copy the finished paragraph into the HR template (1.5).
 
-1. Open **Word desktop** → **Blank document**.
-2. Type `First part. ` (with a space at the end) → press **Enter** → type `Second part.` → press **Enter**.
-3. **Home** → click **¶** (**Show/Hide**, or **Ctrl+Shift+8**) so paragraph marks show.
-4. Select **only** the **¶** at the end of the first line (drag over just that symbol).
-5. Press **Ctrl+D** (Font dialog) → under **Effects**, check **Hidden** → **OK**. The ¶ gets a dotted underline.
-6. Click **¶** again to hide marks. The document should now read `First part. Second part.` on **one line**.
-7. **File** → **Save As** → save it to the **JD Templates** library as `Inline Test.docx`.
-8. Open `Inline Test.docx` from SharePoint in the browser (**Word for the web**).
+> **Prefer to have the other agent do it?** Give it [Appendix D](#appendix-d--spec-for-the-template-agent) and both templates, then run the checker (1.6) on what it returns.
 
-**Result**
-- **One line** in the browser: continue to Part 2.
-- **Two lines** in the browser: stop and tell me. Desktop Word and downloads will still show one line, but I'd switch you to a version that doesn't rely on hidden marks.
+### 1.1 Open and back up
+1. In **JD Templates**, select `JD Change Template - User.docx` → **⋯** → **Download**. Keep an untouched copy as a backup.
+2. Open the downloaded file in **Word desktop**.
+3. **Home** → **¶** on (show marks). **Developer** → **Design Mode** on.
 
-9. Delete `Inline Test.docx` from the library.
+### 1.2 Remove the old Purpose row
+1. Under the **Purpose** heading, find the **PurposeRows** repeating section. It contains the PurposeKept, PurposeAdded and PurposeRemoved controls.
+2. Click the repeating section's outer border (the tag that says **PurposeRows**) so the whole section is selected.
+3. Press **Delete**. If an empty paragraph is left, keep it: the cursor goes there next.
+4. Make sure that paragraph has the same formatting as the old Purpose text (Arial 9, same spacing). If you're not sure, use **Home** → **Format Painter** from a nearby body paragraph.
+
+### 1.3 Build slot 1 (three controls)
+Put the cursor in the empty Purpose paragraph.
+
+1. **Developer** → **Plain Text Content Control** (**Aa**). One control appears.
+2. Click just to the right of it (still on the same line, outside its end tag) → **Plain Text Content Control** again. Do this once more, so you have **three controls on one line**.
+3. Click the **first** control → **Developer** → **Properties**:
+   - **Title:** `PurposeK1` · **Tag:** `PurposeK1`
+   - **Use a style…** stays **unchecked**
+   - **OK**
+4. Click the **second** control → **Properties**:
+   - **Title:** `PurposeR1` · **Tag:** `PurposeR1`
+   - Check **Use a style to format text typed into the empty control** → **Style:** **JD Removed**
+   - **OK**
+5. Click the **third** control → **Properties**:
+   - **Title:** `PurposeA1` · **Tag:** `PurposeA1`
+   - Check **Use a style…** → **Style:** **JD Added**
+   - **OK**
+6. Clear the placeholder text in each of the three. Still in Design Mode, select the placeholder text inside the control, type `200B`, then press **Alt+X**. It turns into an invisible zero-width space.
+
+> **Keep all three on the same line, with no spaces between them.** The flow adds the spaces between words itself.
+
+### 1.4 Copy it into slots 2–5 and add the end slot
+1. Select all three slot-1 controls (drag from the start tag of PurposeK1 to the end tag of PurposeA1) → **Ctrl+C**.
+2. Click immediately after PurposeA1's end tag → **Ctrl+V**. Do this **three more times**, so there are 5 sets of 3 (15 controls) on the one line. The styles and cleared placeholders copy with them.
+3. Rename each copy. Click it → **Properties** → set **Title** and **Tag** both to:
+
+| Set | Kept (no style) | Removed (JD Removed) | Added (JD Added) |
+|---|---|---|---|
+| 1 | `PurposeK1` | `PurposeR1` | `PurposeA1` |
+| 2 | `PurposeK2` | `PurposeR2` | `PurposeA2` |
+| 3 | `PurposeK3` | `PurposeR3` | `PurposeA3` |
+| 4 | `PurposeK4` | `PurposeR4` | `PurposeA4` |
+| 5 | `PurposeK5` | `PurposeR5` | `PurposeA5` |
+
+4. Click right after PurposeA5's end tag → **Plain Text Content Control** → **Properties**:
+   - **Title:** `PurposeKEnd` · **Tag:** `PurposeKEnd`
+   - No style → **OK**
+   - Clear its placeholder (`200B`, **Alt+X**).
+5. **Design Mode** off → **¶** off. The Purpose area should look empty: a single blank line.
+6. **File** → **Save** (same name).
+
+> **Order matters:** K1 R1 A1 K2 R2 A2 K3 R3 A3 K4 R4 A4 K5 R5 A5 KEnd, all on one line.
+
+### 1.5 HR template
+1. In the finished User template: **Design Mode** on → select from PurposeK1's start tag through PurposeKEnd's end tag → **Ctrl+C**.
+2. Download and open `JD Change Template - HR.docx` (keep a backup).
+3. Delete its **PurposeRows** repeating section (1.2).
+4. Click in the empty Purpose paragraph → **Ctrl+V**.
+5. **Save**.
+
+### 1.6 Check both templates
+**With the checker (recommended):** on a computer with Python and the `lxml` package installed (`pip install lxml`), put `verify_purpose_slots.py` in the same folder as the templates and run:
+```
+python verify_purpose_slots.py "JD Change Template - User.docx" "JD Change Template - HR.docx"
+```
+Each template should show **RESULT: PASS (16/16 slots found)**. Each **FAIL** line names the control and what to fix.
+
+**Without Python, check by hand:**
+- **Developer** → **Design Mode** on. The Purpose line shows 16 tags in the order above.
+- **PurposeRows**, **PurposeKept**, **PurposeAdded** and **PurposeRemoved** are gone.
+- Each R control's Properties shows **JD Removed**; each A shows **JD Added**; the K controls and KEnd have no style.
+- No control shows "Click or tap here to enter text".
+
+### 1.7 Upload
+In **JD Templates**, upload both files → **Replace**. (Re-selecting them in the Populate actions happens in Part 7, after the flow is ready.)
+
+> **From here until Part 7 is done, the document's Purpose will be blank**, because the old PurposeRows mapping no longer has a control to fill. Build Parts 2–7 in one sitting, or do the template upload last.
 
 ---
 
-## Part 2 — Templates: make the Purpose row flow inline
-
-Do this in **both** templates: `JD Change Template - User.docx` and `JD Change Template - HR.docx`.
-
-### 2.1 Open the template
-1. In **JD Templates**, select the template → **⋯** → **Download** (keep a copy as a backup).
-2. Open it in **Word desktop**.
-
-### 2.2 Hide the Purpose row's paragraph mark
-1. **Home** → click **¶** to show paragraph marks.
-2. **Developer** → **Design Mode** on. The content controls now show their tags.
-3. Find the **PurposeRows** repeating section. Inside it you'll see the tags for **PurposeKept**, **PurposeAdded** and **PurposeRemoved**, followed by a **¶**, then the end tag of the repeating section.
-4. Select **only** that **¶** (the one inside the repeating section, just before its end tag).
-5. **Ctrl+D** → **Effects** → check **Hidden** → **OK**. The ¶ now has a dotted underline.
-
-> Select only the ¶, not the controls. If a control gets hidden, its text disappears from the document.
-
-### 2.3 Make sure a visible paragraph follows the section
-With paragraph marks still showing, look directly **after** the PurposeRows repeating section's end tag.
-
-- **There's a ¶ on its own before the next section bar:** good. Click into that empty paragraph and check (in the **Home** → **Styles** pane, or by its font) that it has the same style as the Purpose text (Arial 9). If it doesn't, apply the same style.
-- **The next thing is directly the next section bar:** click immediately to the right of the repeating section's end tag (outside it) and press **Enter** to create an empty paragraph. Give it the same style as the Purpose text.
-
-> The hidden mark on the last row joins the Purpose text onto this empty paragraph, which then ends the line. Without it, Purpose could run into the next section.
-
-### 2.4 Check and save
-1. **Developer** → **Design Mode** off → **Home** → **¶** off.
-2. The Purpose area should look the same as before.
-3. **File** → **Save**. Keep the same file name.
-4. Repeat 2.1–2.4 for the other template.
-
-### 2.5 Upload and re-select
-1. In **JD Templates**, upload both files and choose **Replace** when asked.
-2. Open **Save JD Update Request** → **Edit** → **Build Documents** scope.
-3. Click **Populate User Doc** (your Populate a Microsoft Word template action for the user copy) → **File** → choose `JD Change Template - User.docx` again, even though it looks selected.
-4. Check that every mapping is still filled in, especially the repeating sections (**PurposeRows**, **DutiesRows**, **EducationRows**, **EduReqRows**, **EduLevelRows**, …). Re-enter any that went blank.
-5. Do the same for **Populate HR Doc** with `JD Change Template - HR.docx`.
-6. **Save**.
-
-> Re-select the file after **any** template change. Skipping this caused the blank and corrupted documents earlier.
-
----
-
-## Part 3 — Child flow: new input and variables
+## Part 2 — Child flow: new input and variables
 
 Open **Build Redline Rows** from your solution → **Edit**.
 
-### 3.1 Add the Mode input
-1. Click the trigger **Manually trigger a flow**.
-2. **+ Add an input** → **Text** → name it `Mode`.
-3. **⋯** next to Mode → **Make the field optional**.
-4. Check its key: trigger → **⋯** → **Peek code**. Under `properties`, the new input is usually `text_2`. The expressions below assume `text_2`. If yours differs, use your key.
+### 2.1 Add the Mode input
+1. Click **Manually trigger a flow** → **+ Add an input** → **Text** → name it `Mode`.
+2. **⋯** next to Mode → **Make the field optional**.
+3. Check its key: trigger → **⋯** → **Peek code**. Under `properties`, the new input is usually `text_2`. The expressions below assume `text_2`. If yours differs, use your key.
 
-### 3.2 Add three variables at the top
-Variables must be created at the top level of the flow, before any condition or loop.
+### 2.2 Add four variables at the top
+Variables must be created at the top level, before any condition or loop. Click **+** between the trigger and **NL** → **Initialize variable**, then add each one below the last:
 
-1. Click **+** between the trigger and **NL** → **Add an action** → **Initialize variable**.
-   - **Name:** `RowsOut` · **Type:** String · **Value:** *(empty)*
-2. **+** below it → **Initialize variable**.
-   - **Name:** `GapList` · **Type:** Array · **Value:** `[]`
-3. **+** below it → **Initialize variable**.
-   - **Name:** `Segs` · **Type:** Array · **Value:** `[]`
+| Name | Type | Value |
+|---|---|---|
+| `RowsOut` | String | *(empty)* |
+| `GapList` | Array | `[]` |
+| `Slots` | Array | `[]` |
+| `PendingK` | String | *(empty)* |
 
 ---
 
-## Part 4 — Child flow: the Paragraph branch
+## Part 3 — Child flow: compare sentences and words
 
-Everything in this part goes **between AllRows and the Respond step**.
+Everything in Parts 3 and 4 goes **between AllRows and the Respond step**.
 
 **How to enter the steps below**
 - **Expression:** click the field → **fx** (new designer) or **Expression** tab (classic) → paste → **Add**.
 - **Filter array condition:** click **Edit in advanced mode** → paste the line starting with `@`.
-- **Select, text mode:** on **Map**, click the **T** icon (**Switch Map to text mode**) → paste the expression into the single box.
+- **Select, text mode:** on **Map**, click **T** (**Switch Map to text mode**) → paste into the single box.
 - **Select, key/value mode:** type each key on the left, and add each value on the right with **Expression**.
 - **Rename every action as soon as you add it.** Expressions refer to actions by name, with spaces as underscores.
 
-### 4.1 Add the condition
+### 3.1 The condition
 1. Click **+** between **AllRows** and the Respond step → **Condition** → rename it `Is Paragraph`.
-2. Left box → **Expression:**
+2. Left → **Expression:**
    ```
    equals(toLower(trim(coalesce(triggerBody()?['text_2'], ''))), 'paragraph')
    ```
-3. Operator: **is equal to** · Right box → **Expression:** `true`
+3. **is equal to** · Right → **Expression:** `true`
 
-Steps 4.2–4.7 all go in the **True** branch. 4.8 goes in **False**.
+Steps 3.2 through 4.4 go in **Is Paragraph → True**. Step 4.5 goes in **False**.
 
-### 4.2 Flatten both versions into one line
+### 3.2 Flatten both versions
 
-**True** branch:
-
-1. **+** → **Compose** → rename `OrigFlat` → **Expression:**
+1. **+** → **Compose** → rename `OrigFlat`:
    ```
    trim(replace(replace(replace(outputs('OriginalNorm'), outputs('NL'), ' '), '  ', ' '), '  ', ' '))
    ```
-2. **+** → **Compose** → rename `PropFlat` → **Expression:**
+2. **+** → **Compose** → rename `PropFlat`:
    ```
    trim(replace(replace(replace(outputs('ProposedNorm'), outputs('NL'), ' '), '  ', ' '), '  ', ' '))
    ```
 
-### 4.3 Split into sentences
+### 3.3 Split into sentences
 
 1. **+** → **Select** → rename `OS Split`.
-   - **From** → **Expression:**
+   - **From:**
      ```
      split(replace(replace(replace(outputs('OrigFlat'), '. ', concat('.', decodeUriComponent('%1E'))), '? ', concat('?', decodeUriComponent('%1E'))), '! ', concat('!', decodeUriComponent('%1E'))), decodeUriComponent('%1E'))
      ```
    - **Map (text mode):** `trim(item())`
 2. **+** → **Filter array** → rename `OS`.
-   - **From:** `body('OS_Split')`
-   - **Advanced mode:** `@greater(length(item()), 0)`
+   - **From:** `body('OS_Split')` · **Advanced mode:** `@greater(length(item()), 0)`
 3. **+** → **Select** → rename `PS Split`.
-   - **From** → **Expression:**
+   - **From:**
      ```
      split(replace(replace(replace(outputs('PropFlat'), '. ', concat('.', decodeUriComponent('%1E'))), '? ', concat('?', decodeUriComponent('%1E'))), '! ', concat('!', decodeUriComponent('%1E'))), decodeUriComponent('%1E'))
      ```
    - **Map (text mode):** `trim(item())`
 4. **+** → **Filter array** → rename `PS`.
-   - **From:** `body('PS_Split')`
-   - **Advanced mode:** `@greater(length(item()), 0)`
+   - **From:** `body('PS_Split')` · **Advanced mode:** `@greater(length(item()), 0)`
 
-> `%1E` is an invisible separator character. It marks sentence ends without breaking on periods inside words, like "e.g." or "1.5".
+> `%1E` is an invisible separator character. It marks sentence ends without breaking on "e.g." or "1.5".
 
-### 4.4 Find the sentences that are in both
+### 3.4 Find the sentences that are in both
 
-1. **+** → **Filter array** → rename `KeptO`. These are the positions of original sentences that still exist.
-   - **From** → **Expression:**
-     ```
-     take(range(0, add(length(body('OS')), 1)), length(body('OS')))
-     ```
+1. **+** → **Filter array** → rename `KeptO`.
+   - **From:** `take(range(0, add(length(body('OS')), 1)), length(body('OS')))`
    - **Advanced mode:** `@contains(body('PS'), body('OS')[item()])`
-2. **+** → **Filter array** → rename `KeptP`. These are the positions of proposed sentences that existed before.
-   - **From** → **Expression:**
-     ```
-     take(range(0, add(length(body('PS')), 1)), length(body('PS')))
-     ```
+2. **+** → **Filter array** → rename `KeptP`.
+   - **From:** `take(range(0, add(length(body('PS')), 1)), length(body('PS')))`
    - **Advanced mode:** `@contains(body('OS'), body('PS')[item()])`
-3. **+** → **Select** → rename `Anchor Check`. This confirms the kept sentences are in the same order in both versions.
-   - **From** → **Expression:**
+3. **+** → **Select** → rename `Anchor Check`.
+   - **From:**
      ```
      take(range(0, add(min(length(body('KeptO')), length(body('KeptP'))), 1)), min(length(body('KeptO')), length(body('KeptP'))))
      ```
@@ -237,9 +252,9 @@ Steps 4.2–4.7 all go in the **True** branch. 4.8 goes in **False**.
      if(equals(body('OS')[body('KeptO')[item()]], body('PS')[body('KeptP')[item()]]), 'y', 'n')
      ```
 
-> **Why `take(range(...+1), ...)`?** `range()` errors when asked for zero numbers, for example when the original Purpose was blank. Asking for one extra and then taking the real count avoids that.
+> **Why `take(range(… + 1), …)`:** `range()` errors when asked for zero numbers, for example when the original Purpose is blank. Asking for one extra and then taking the real count avoids that.
 
-### 4.5 Build the gaps
+### 3.5 Build the gaps
 
 1. **+** → **Condition** → rename `Aligned`.
    - Left → **Expression:**
@@ -248,22 +263,19 @@ Steps 4.2–4.7 all go in the **True** branch. 4.8 goes in **False**.
      ```
    - **is equal to** · Right → **Expression:** `true`
 
-**Aligned → True branch:**
+**Aligned → True:**
 
-2. **+** → **Compose** → rename `KOB` → **Expression:**
+2. **+** → **Compose** → rename `KOB`:
    ```
    union(createArray(-1), body('KeptO'), createArray(length(body('OS'))))
    ```
-3. **+** → **Compose** → rename `KPB` → **Expression:**
+3. **+** → **Compose** → rename `KPB`:
    ```
    union(createArray(-1), body('KeptP'), createArray(length(body('PS'))))
    ```
 4. **+** → **Select** → rename `Gaps`.
-   - **From** → **Expression:**
-     ```
-     range(0, add(length(body('KeptP')), 1))
-     ```
-   - **Map (key/value mode).** Add four rows:
+   - **From:** `range(0, add(length(body('KeptP')), 1))`
+   - **Map (key/value):**
 
 | Key | Value (Expression) |
 |---|---|
@@ -272,11 +284,11 @@ Steps 4.2–4.7 all go in the **True** branch. 4.8 goes in **False**.
 | `added` | `join(take(skip(body('PS'), add(outputs('KPB')[item()], 1)), sub(sub(outputs('KPB')[add(item(), 1)], outputs('KPB')[item()]), 1)), ' ')` |
 | `anchor` | `join(take(skip(body('PS'), outputs('KPB')[add(item(), 1)]), if(less(item(), length(body('KeptP'))), 1, 0)), '')` |
 
-5. **+** → **Set variable** → **Name:** `GapList` → **Value** → **Expression:** `body('Gaps')`
+5. **+** → **Set variable** → **GapList** → **Value:** `body('Gaps')`
 
-**Aligned → False branch** (moved or duplicated sentences: treat the whole paragraph as one gap):
+**Aligned → False** (moved or duplicated sentences: treat the whole paragraph as one gap):
 
-6. **+** → **Compose** → rename `Whole Gap` → **Inputs:** type or paste this directly into the box, not as an expression:
+6. **+** → **Compose** → rename `Whole Gap` → paste directly into **Inputs** (not as an expression):
    ```json
    [
      {
@@ -287,138 +299,146 @@ Steps 4.2–4.7 all go in the **True** branch. 4.8 goes in **False**.
      }
    ]
    ```
-7. **+** → **Set variable** → **Name:** `GapList` → **Value** → **Expression:** `outputs('Whole_Gap')`
+7. **+** → **Set variable** → **GapList** → **Value:** `outputs('Whole_Gap')`
 
-> **What a gap is:** the stretch between two sentences that didn't change. `removed` is the old sentences in that stretch, `added` is the new ones, and `anchor` is the unchanged sentence that ends it.
+> **What a gap is:** the stretch between two unchanged sentences. `removed` is the old sentences in that stretch, `added` is the new ones, and `anchor` is the unchanged sentence that ends it.
 
-### 4.6 Mark only the changed words in each gap
+### 3.6 Trim matching words inside each gap
 
-All of this goes **below the Aligned condition** (not inside either of its branches), still inside **Is Paragraph → True**.
+**Below the Aligned condition** (not in either of its branches), still in **Is Paragraph → True**:
 
-1. **+** → **Apply to each** → rename `Each Gap` → **Select an output from previous steps:** **Expression** → `variables('GapList')`.
-2. **⋯** → **Settings** → **Concurrency Control** must be **Off** → **Done**. Order matters here.
+1. **+** → **Apply to each** → rename `Each Gap` → **From:** `variables('GapList')`.
+2. **⋯** → **Settings** → **Concurrency Control** **Off** → **Done**. Order matters.
 
 **Inside Each Gap:**
 
-3. **+** → **Compose** → rename `RW` (removed words) → **Expression:**
-   ```
-   split(items('Each_Gap')?['removed'], ' ')
-   ```
-4. **+** → **Compose** → rename `AW` (added words) → **Expression:**
-   ```
-   split(items('Each_Gap')?['added'], ' ')
-   ```
+3. **+** → **Compose** → rename `RW`: `split(items('Each_Gap')?['removed'], ' ')`
+4. **+** → **Compose** → rename `AW`: `split(items('Each_Gap')?['added'], ' ')`
 5. **+** → **Select** → rename `Prefix Flags`.
-   - **From** → **Expression:**
-     ```
-     range(0, min(length(outputs('RW')), length(outputs('AW'))))
-     ```
-   - **Map (text mode):**
-     ```
-     if(equals(outputs('RW')[item()], outputs('AW')[item()]), 'y', 'n')
-     ```
-6. **+** → **Compose** → rename `P` (how many words match at the start) → **Expression:**
+   - **From:** `range(0, min(length(outputs('RW')), length(outputs('AW'))))`
+   - **Map (text mode):** `if(equals(outputs('RW')[item()], outputs('AW')[item()]), 'y', 'n')`
+6. **+** → **Compose** → rename `P` (words matching at the start):
    ```
    if(or(empty(items('Each_Gap')?['removed']), empty(items('Each_Gap')?['added'])), 0, indexOf(concat(join(body('Prefix_Flags'), ''), 'n'), 'n'))
    ```
 7. **+** → **Select** → rename `Suffix Flags`.
-   - **From** → **Expression:**
-     ```
-     range(0, max(sub(min(length(outputs('RW')), length(outputs('AW'))), outputs('P')), 1))
-     ```
+   - **From:** `range(0, max(sub(min(length(outputs('RW')), length(outputs('AW'))), outputs('P')), 1))`
    - **Map (text mode):**
      ```
      if(equals(outputs('RW')[sub(sub(length(outputs('RW')), 1), item())], outputs('AW')[sub(sub(length(outputs('AW')), 1), item())]), 'y', 'n')
      ```
-8. **+** → **Compose** → rename `S` (how many words match at the end) → **Expression:**
+8. **+** → **Compose** → rename `S` (words matching at the end):
    ```
    if(or(empty(items('Each_Gap')?['removed']), empty(items('Each_Gap')?['added'])), 0, min(indexOf(concat(join(body('Suffix_Flags'), ''), 'n'), 'n'), sub(min(length(outputs('RW')), length(outputs('AW'))), outputs('P'))))
    ```
 
-> Inside a **Select**, `item()` means the Select's own item. That's why the loop's current gap is read with `items('Each_Gap')`.
+> Inside a **Select**, `item()` means the Select's own item. The loop's current gap is read with `items('Each_Gap')`.
 
-Now add the four pieces of this gap, in reading order. Each one is an **Append to array variable** with **Name:** `Segs`. Paste the **Value** directly into the box, not as an expression.
+---
 
-9. **+** → **Append to array variable** → rename `Add Lead` → **Name:** `Segs` → **Value:**
+## Part 4 — Child flow: fill the slots
+
+### 4.1 This gap's four pieces
+Still **inside Each Gap**, below **S**:
+
+1. **+** → **Compose** → rename `Lead Text` (kept words before the change):
+   ```
+   join(take(outputs('AW'), outputs('P')), ' ')
+   ```
+2. **+** → **Compose** → rename `Removed Text`:
+   ```
+   join(take(skip(outputs('RW'), outputs('P')), sub(length(outputs('RW')), add(outputs('P'), outputs('S')))), ' ')
+   ```
+3. **+** → **Compose** → rename `Added Text`:
+   ```
+   join(take(skip(outputs('AW'), outputs('P')), sub(length(outputs('AW')), add(outputs('P'), outputs('S')))), ' ')
+   ```
+4. **+** → **Compose** → rename `Tail Text` (kept words after the change, plus the unchanged sentence that ends the gap):
+   ```
+   trim(concat(join(skip(outputs('AW'), sub(length(outputs('AW')), outputs('S'))), ' '), ' ', items('Each_Gap')?['anchor']))
+   ```
+
+### 4.2 Changed spot, or kept text only?
+1. **+** → **Condition** → rename `Gap Changed`.
+   - Left → **Expression:**
+     ```
+     or(not(empty(outputs('Removed_Text'))), not(empty(outputs('Added_Text'))))
+     ```
+   - **is equal to** · Right → **Expression:** `true`
+
+**Gap Changed → True** (this gap fills a slot):
+
+2. **+** → **Append to array variable** → rename `Add Slot` → **Name:** `Slots` → paste directly into **Value**:
    ```json
    {
-     "Kept": "@{join(take(outputs('AW'), outputs('P')), ' ')}",
-     "Added": "",
-     "Removed": ""
+     "k": "@{trim(concat(variables('PendingK'), ' ', outputs('Lead_Text')))}",
+     "r": "@{outputs('Removed_Text')}",
+     "a": "@{outputs('Added_Text')}"
    }
    ```
-10. **+** → **Append to array variable** → rename `Add Removed` → **Name:** `Segs` → **Value:**
-    ```json
-    {
-      "Kept": "",
-      "Added": "",
-      "Removed": "@{join(take(skip(outputs('RW'), outputs('P')), sub(length(outputs('RW')), add(outputs('P'), outputs('S')))), ' ')}"
-    }
-    ```
-11. **+** → **Append to array variable** → rename `Add Added` → **Name:** `Segs` → **Value:**
-    ```json
-    {
-      "Kept": "",
-      "Added": "@{join(take(skip(outputs('AW'), outputs('P')), sub(length(outputs('AW')), add(outputs('P'), outputs('S')))), ' ')}",
-      "Removed": ""
-    }
-    ```
-12. **+** → **Append to array variable** → rename `Add Tail` → **Name:** `Segs` → **Value:**
-    ```json
-    {
-      "Kept": "@{trim(concat(join(skip(outputs('AW'), sub(length(outputs('AW')), outputs('S'))), ' '), ' ', items('Each_Gap')?['anchor']))}",
-      "Added": "",
-      "Removed": ""
-    }
-    ```
+3. **+** → **Set variable** → rename `Start Pending` → **Name:** `PendingK` → **Value:** `outputs('Tail_Text')`
 
-> After saving, reopen each Append step. Each `@{...}` should show as an expression token. If one stayed as plain text, delete it, keep the quotes, click between them and add the expression (without `@{ }`) through **Expression**.
+**Gap Changed → False** (no change, so just carry the kept text forward):
 
-### 4.7 Finish the rows
+4. **+** → **Compose** → rename `Pending Next`:
+   ```
+   trim(concat(trim(concat(variables('PendingK'), ' ', outputs('Lead_Text'))), ' ', outputs('Tail_Text')))
+   ```
+5. **+** → **Set variable** → rename `Carry Pending` → **Name:** `PendingK` → **Value:** `outputs('Pending_Next')`
 
-**Below the Each Gap loop**, still in **Is Paragraph → True**:
+> **What PendingK does:** it holds the kept text that hasn't been placed yet. When the next change comes, it becomes that slot's **K**. After the last change, it becomes **KEnd**.
 
-1. **+** → **Filter array** → rename `Seg Rows`. This drops empty pieces.
-   - **From** → **Expression:** `variables('Segs')`
-   - **Advanced mode:**
-     ```
-     @not(empty(concat(item()?['Kept'], item()?['Added'], item()?['Removed'])))
-     ```
-2. **+** → **Select** → rename `Para Rows`. This adds a space after each piece so the words don't run together.
-   - **From** → **Expression:** `body('Seg_Rows')`
-   - **Map (key/value mode):**
+> After saving, reopen **Add Slot**. Each `@{...}` should show as an expression token. If one stayed as plain text, delete it, keep the quotes, click between them and add the expression (without `@{ }`) through **Expression**.
+
+### 4.3 After the loop: fit into 5 slots
+**Below Each Gap** (outside the loop), still in **Is Paragraph → True**:
+
+1. **+** → **Compose** → rename `Fits`:
+   ```
+   lessOrEquals(length(variables('Slots')), 5)
+   ```
+2. **+** → **Compose** → rename `Final Slots` (more than 5 changes → show the whole paragraph replaced, as today):
+   ```
+   if(outputs('Fits'), variables('Slots'), createArray(addProperty(addProperty(addProperty(json('{}'), 'k', ''), 'r', outputs('OrigFlat')), 'a', outputs('PropFlat'))))
+   ```
+3. **+** → **Compose** → rename `Final End`:
+   ```
+   if(outputs('Fits'), variables('PendingK'), '')
+   ```
+4. **+** → **Compose** → rename `Padded` (always exactly 5 slots, with empty ones at the end):
+   ```
+   take(union(outputs('Final_Slots'), json('[{"k":"","r":"","a":"","p":1},{"k":"","r":"","a":"","p":2},{"k":"","r":"","a":"","p":3},{"k":"","r":"","a":"","p":4},{"k":"","r":"","a":"","p":5}]')), 5)
+   ```
+
+### 4.4 Add spacing and package the result
+1. **+** → **Select** → rename `Slot Text`. This adds a space after each filled piece so words don't run together.
+   - **From:** `outputs('Padded')`
+   - **Map (key/value):**
 
 | Key | Value (Expression) |
 |---|---|
-| `Kept` | `if(empty(item()?['Kept']), '', concat(item()?['Kept'], ' '))` |
-| `Added` | `if(empty(item()?['Added']), '', concat(item()?['Added'], ' '))` |
-| `Removed` | `if(empty(item()?['Removed']), '', concat(item()?['Removed'], ' '))` |
+| `k` | `if(empty(item()?['k']), '', concat(item()?['k'], ' '))` |
+| `r` | `if(empty(item()?['r']), '', concat(item()?['r'], ' '))` |
+| `a` | `if(empty(item()?['a']), '', concat(item()?['a'], ' '))` |
 
-3. **+** → **Set variable** → **Name:** `RowsOut` → **Value** → **Expression:**
+2. **+** → **Compose** → rename `Para Out`:
    ```
-   string(body('Para_Rows'))
+   addProperty(addProperty(json('{}'), 'slots', body('Slot_Text')), 'end', outputs('Final_End'))
    ```
+3. **+** → **Set variable** → **Name:** `RowsOut` → **Value:** `string(outputs('Para_Out'))`
 
-### 4.8 The False branch (every other section)
-
-In **Is Paragraph → False**:
-
-1. **+** → **Set variable** → **Name:** `RowsOut` → **Value** → **Expression:**
-   ```
-   string(outputs('AllRows'))
-   ```
+### 4.5 Is Paragraph → False (every other section)
+1. **+** → **Set variable** → **Name:** `RowsOut` → **Value:** `string(outputs('AllRows'))`
 
 > Sections without Mode = Paragraph get exactly the rows they get today.
 
 ---
 
-## Part 5 — Child flow: return the right rows
+## Part 5 — Child flow: return the result
 
-1. Click the **Respond to a PowerApp or flow** step (below the Is Paragraph condition).
-2. Click the **Rows** output value → delete the current expression (`string(outputs('AllRows'))`).
-3. **Expression** → `variables('RowsOut')` → **Add**.
-4. Make sure the Respond step is **below** the condition on the main line, not inside a branch.
-5. **Save**.
+1. Click **Respond to a PowerApp or flow** (below Is Paragraph, on the main line).
+2. **Rows** → delete the current expression (`string(outputs('AllRows'))`) → **Expression** → `variables('RowsOut')` → **Add**.
+3. **Save**.
 
 ---
 
@@ -429,95 +449,123 @@ In **Is Paragraph → False**:
    - **Original:** `Provides service to consumer clients. Processes deposits accurately. Refers clients to specialists. Works as a team.`
    - **Proposed:** `Provides service to consumer and small business clients. Processes deposits accurately. Works as a team. Manages a portfolio of 40 clients.`
    - **Mode:** `Paragraph`
-3. **Run flow** → **Done** → open the run.
-4. **Aligned** should take the **True** branch. Open **Respond** → the **Rows** output should be:
+3. **Run flow** → **Done** → open the run → **Respond** → **Rows** should be:
 
 ```json
-[
-  {"Kept": "Provides service to consumer ", "Added": "", "Removed": ""},
-  {"Kept": "", "Added": "and small business ", "Removed": ""},
-  {"Kept": "clients. Processes deposits accurately. ", "Added": "", "Removed": ""},
-  {"Kept": "", "Added": "", "Removed": "Refers clients to specialists. "},
-  {"Kept": "Works as a team. ", "Added": "", "Removed": ""},
-  {"Kept": "", "Added": "Manages a portfolio of 40 clients. ", "Removed": ""}
-]
+{"slots":[
+  {"k":"Provides service to consumer ","r":"","a":"and small business "},
+  {"k":"clients. Processes deposits accurately. ","r":"Refers clients to specialists. ","a":""},
+  {"k":"Works as a team. ","r":"","a":"Manages a portfolio of 40 clients. "},
+  {"k":"","r":"","a":""},
+  {"k":"","r":"","a":""}],
+ "end":""}
 ```
 
-That reads: Provides service to consumer **and small business** clients. Processes deposits accurately. ~~Refers clients to specialists.~~ Works as a team. **Manages a portfolio of 40 clients.**
+Read across, that's: Provides service to consumer **and small business** clients. Processes deposits accurately. ~~Refers clients to specialists.~~ Works as a team. **Manages a portfolio of 40 clients.**
 
-5. More quick checks, all with **Mode** = `Paragraph`:
+4. More checks (Mode = `Paragraph` unless noted):
 
-| Test | Original | Proposed | Expected Rows |
+| Test | Original | Proposed | Expected |
 |---|---|---|---|
-| Unchanged | the same Original as above | *(blank)* | 4 rows, all Kept, one sentence each |
-| New Purpose | *(blank)* | `Supports branch operations.` | 1 row: Added |
-| Reordered (fallback) | `Works hard. Helps.` | `Helps. Works hard.` | **Aligned** takes **False**. The rows mark the differing span as Removed then Added |
-| Mode blank | the same Original as above | the same Proposed as above | The same rows as before this change (whole sentences Kept/Added/Removed, removed ones at the end) |
+| Unchanged | the Original above | *(blank)* | All 5 slots empty; `end` = the full original text |
+| New Purpose | *(blank)* | `Supports branch operations.` | Slot 1: `a` = `Supports branch operations. `; `end` blank |
+| Reordered | `Works hard. Helps.` | `Helps. Works hard.` | **Aligned** takes **False**; slot 1 has the old text in `r` and the new in `a` |
+| Mode blank | the Original above | the Proposed above | A list of Kept/Added/Removed rows, as before this change |
 
 ---
 
-## Part 7 — Parent flow: turn on Paragraph mode for Purpose
+## Part 7 — Parent flow: wire Purpose to the slots
 
-1. Open **Save JD Update Request** → **Edit** → **Build Documents** scope.
-2. Click **Redline Purpose** (Run a Child Flow → Build Redline Rows).
-3. The new **Mode** field should now appear on the action. If it doesn't:
-   1. Click away, then reopen the action.
-   2. Still missing: note the current **Original** and **Proposed** values, delete the action, add **Run a Child Flow** → **Build Redline Rows** again, rename it `Redline Purpose`, and re-enter both values.
-4. **Mode:** type `Paragraph`.
-5. Leave every other Redline action (Duties, Education, Experience, Certs, KSA, EduReq, ExpReq, EduLevel, ExpLevel) with **Mode** blank.
-6. **Save**.
+Open **Save JD Update Request** → **Edit** → **Build Documents** scope.
 
-> **Rows Purpose** and the Populate mappings don't change. They already read `Kept`, `Added` and `Removed` from each row.
+### 7.1 Turn on Paragraph mode
+1. Click **Redline Purpose**. The new **Mode** field should appear. If it doesn't:
+   1. Close and reopen the action.
+   2. Still missing: note the current **Original** and **Proposed** values, delete the action, add **Run a Child Flow** → **Build Redline Rows**, rename it `Redline Purpose`, and re-enter both.
+2. **Mode:** `Paragraph`.
+3. Leave **Mode** blank on every other Redline action.
+
+### 7.2 Replace Rows Purpose
+1. Click **Rows Purpose** (the Select that maps PurposeKept/Added/Removed) → **⋯** → **Delete**. Nothing in the template uses those keys any more.
+2. In the same spot: **+** → **Compose** → rename `Purpose Slots` → **Expression:**
+   ```
+   json(body('Redline_Purpose')?['rows'])
+   ```
+
+### 7.3 Re-select the templates and map the slots
+1. Click **Populate User Doc** → **File** → choose `JD Change Template - User.docx` again, even if it looks selected. This reloads the field list.
+2. The **PurposeRows** field is gone and 16 new fields appear. Fill each one through **Expression**:
+
+| Field | Expression |
+|---|---|
+| PurposeK1 | `outputs('Purpose_Slots')?['slots'][0]?['k']` |
+| PurposeR1 | `outputs('Purpose_Slots')?['slots'][0]?['r']` |
+| PurposeA1 | `outputs('Purpose_Slots')?['slots'][0]?['a']` |
+| PurposeK2 | `outputs('Purpose_Slots')?['slots'][1]?['k']` |
+| PurposeR2 | `outputs('Purpose_Slots')?['slots'][1]?['r']` |
+| PurposeA2 | `outputs('Purpose_Slots')?['slots'][1]?['a']` |
+| PurposeK3 | `outputs('Purpose_Slots')?['slots'][2]?['k']` |
+| PurposeR3 | `outputs('Purpose_Slots')?['slots'][2]?['r']` |
+| PurposeA3 | `outputs('Purpose_Slots')?['slots'][2]?['a']` |
+| PurposeK4 | `outputs('Purpose_Slots')?['slots'][3]?['k']` |
+| PurposeR4 | `outputs('Purpose_Slots')?['slots'][3]?['r']` |
+| PurposeA4 | `outputs('Purpose_Slots')?['slots'][3]?['a']` |
+| PurposeK5 | `outputs('Purpose_Slots')?['slots'][4]?['k']` |
+| PurposeR5 | `outputs('Purpose_Slots')?['slots'][4]?['r']` |
+| PurposeA5 | `outputs('Purpose_Slots')?['slots'][4]?['a']` |
+| PurposeKEnd | `outputs('Purpose_Slots')?['end']` |
+
+3. Check that every **other** mapping is still filled in (all the other repeating sections and single fields). Re-enter any that went blank.
+4. Repeat steps 1–3 for **Populate HR Doc** with `JD Change Template - HR.docx`.
+5. **Save**.
+
+> **Tip:** after filling PurposeK1, copy its expression, paste it into the next field, and edit just the index (`[0]`–`[4]`) and the letter (`k`/`r`/`a`).
+
+> The slot index always exists (0–4), because the child flow pads to exactly 5. So these expressions can't fail on a short Purpose.
 
 ---
 
 ## Part 8 — End-to-end tests
 
-Run each through the agent and open both the user copy and the HR copy, in **Word for the web** and in **Word desktop** (download).
+Run each through the agent. Open the user copy **and** the HR copy, in **Word for the web** and in **Word desktop**.
 
-| # | Edit the manager makes to Purpose | Expected in the document |
+| # | Purpose edit | Expected |
 |---|---|---|
-| 1 | Add a word: "consumer clients" → "consumer and small business clients" | Only **and small business** is yellow. The rest is plain, in one paragraph |
-| 2 | Append a sentence at the end | Only the new sentence is yellow |
-| 3 | Insert a sentence in the middle | The new sentence is yellow, in place |
-| 4 | Delete a sentence | That sentence is red strikethrough, where it was |
-| 5 | Change a number: "50 clients" → "40 clients" | ~~50~~ **40** inline |
-| 6 | Two edits in different sentences | Two separate marked spots; the sentences between them are plain |
-| 7 | Rewrite the whole Purpose | The old text struck through, then the new text highlighted (the same as today) |
-| 8 | Don't touch Purpose (edit another section) | Purpose plain, one paragraph |
-| 9 | Principal Duties edit in the same request | Duties redline unchanged from today (bullet lines) |
+| 1 | "consumer clients" → "consumer and small business clients" | Only **and small business** yellow, in one paragraph |
+| 2 | Append a sentence | Only the new sentence yellow, at the end |
+| 3 | Insert a sentence in the middle | The new sentence yellow, in place |
+| 4 | Delete a sentence | That sentence red strikethrough, where it was |
+| 5 | "50 clients" → "40 clients" | ~~50~~ **40** inline |
+| 6 | Two edits in different sentences | Two separate marked spots |
+| 7 | Rewrite the whole Purpose | Old struck through, then new highlighted |
+| 8 | Purpose untouched (edit another section) | Purpose plain, complete |
+| 9 | Six separate small edits | Whole paragraph shown as replaced (the fallback) |
+| 10 | Principal Duties edit in the same request | Duties redline unchanged from today |
 
 **Check also:**
-- Purpose is **one paragraph**: no line breaks between pieces, and it doesn't run into the next section bar.
-- Spacing between words is normal, with no double spaces or missing spaces around the marked words.
-- The **HR review email** still sends, with the document attached.
+- Normal spacing between words, with no double spaces or missing spaces around the marks.
+- Purpose doesn't run into the next section.
+- The HR review email still sends, with the document attached.
 
 ---
 
-## Appendix A — Using it on other sections
+## Appendix A — Other paragraph sections
 
-Paragraph mode works on any section stored as **one paragraph**. To turn it on for another section:
+Each paragraph section needs its own 16 slots, with its own prefix (for example `EduK1`… for Education Details), and its own 16 mappings. The flow side is just Mode = `Paragraph` on that section's Redline action plus a `… Slots` Compose. Only do this for sections stored as **one paragraph**: Paragraph mode joins line breaks together.
 
-1. **Template (both copies):** hide that section's row paragraph mark (Part 2.2) and make sure a visible paragraph follows it (Part 2.3). Then upload and re-select (Part 2.5).
-2. **Parent flow:** set **Mode** = `Paragraph` on that section's Redline action.
-
-| Section | Use Paragraph mode? |
+| Section | Worth it? |
 |---|---|
-| Purpose | Yes |
-| Education details (**Redline Education**) | Only if your Education Details are a single paragraph, not several lines |
-| Work Experience details (**Redline Experience**) | Same as Education |
+| Purpose | Yes (this guide) |
+| Education / Work Experience Details | Only if your Details are one paragraph. Tell me, and I'll give you the exact names and mappings |
 | Principal Duties, KSAs, Certifications | No. These are bullet lists, so keep the line comparison |
-| Req/Pref and Level rows | No. These are short single values |
-
-> Paragraph mode joins line breaks into one paragraph. Don't use it on a section whose lines should stay separate.
+| Req/Pref, Level | No. These are short single values |
 
 ---
 
 ## Appendix B — Name reference
 
-**New input:** `Mode` (key `text_2`), optional, `Paragraph` or blank
-
-**New variables:** `RowsOut` (String), `GapList` (Array), `Segs` (Array)
+**New input:** `Mode` (key `text_2`), `Paragraph` or blank
+**New variables:** `RowsOut` (String), `GapList` (Array), `Slots` (Array), `PendingK` (String)
 
 **New actions in Build Redline Rows**
 
@@ -525,26 +573,25 @@ Paragraph mode works on any section stored as **one paragraph**. To turn it on f
 |---|---|---|
 | Is Paragraph | Condition | After AllRows |
 | OrigFlat, PropFlat | Compose | Is Paragraph → True |
-| OS Split, PS Split | Select | Is Paragraph → True |
-| OS, PS | Filter array | Is Paragraph → True |
-| KeptO, KeptP | Filter array | Is Paragraph → True |
-| Anchor Check | Select | Is Paragraph → True |
-| Aligned | Condition | Is Paragraph → True |
-| KOB, KPB | Compose | Aligned → True |
-| Gaps | Select | Aligned → True |
-| Set GapList | Set variable | Aligned → True |
-| Whole Gap | Compose | Aligned → False |
-| Set GapList | Set variable | Aligned → False |
+| OS Split, PS Split | Select | ″ |
+| OS, PS, KeptO, KeptP | Filter array | ″ |
+| Anchor Check | Select | ″ |
+| Aligned | Condition | ″ |
+| KOB, KPB, Gaps, Set GapList | Compose / Select / Set variable | Aligned → True |
+| Whole Gap, Set GapList | Compose / Set variable | Aligned → False |
 | Each Gap | Apply to each | Is Paragraph → True, below Aligned |
-| RW, AW, P, S | Compose | Inside Each Gap |
+| RW, AW, P, S, Lead Text, Removed Text, Added Text, Tail Text | Compose | Inside Each Gap |
 | Prefix Flags, Suffix Flags | Select | Inside Each Gap |
-| Add Lead, Add Removed, Add Added, Add Tail | Append to array variable | Inside Each Gap |
-| Seg Rows | Filter array | Is Paragraph → True, below Each Gap |
-| Para Rows | Select | Is Paragraph → True |
-| Set RowsOut | Set variable | Is Paragraph → True |
-| Set RowsOut | Set variable | Is Paragraph → False |
+| Gap Changed | Condition | Inside Each Gap |
+| Add Slot, Start Pending | Append to array / Set variable | Gap Changed → True |
+| Pending Next, Carry Pending | Compose / Set variable | Gap Changed → False |
+| Fits, Final Slots, Final End, Padded, Para Out | Compose | Is Paragraph → True, below Each Gap |
+| Slot Text | Select | ″ |
+| Set RowsOut | Set variable | Is Paragraph → True and → False |
 
-**Changed:** Respond → Rows = `variables('RowsOut')` · Redline Purpose → Mode = `Paragraph` · both templates: PurposeRows paragraph mark hidden
+**Parent flow:** Redline Purpose → Mode `Paragraph` · Rows Purpose **deleted** · Purpose Slots (Compose) **added** · 16 Purpose fields mapped in both Populate actions
+
+**Templates:** PurposeRows (and PurposeKept / Added / Removed) **removed** · PurposeK1–K5, PurposeR1–R5, PurposeA1–A5, PurposeKEnd **added**, inline, in that order
 
 ---
 
@@ -552,13 +599,41 @@ Paragraph mode works on any section stored as **one paragraph**. To turn it on f
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Purpose pieces each on their own line | The row's paragraph mark isn't hidden, or the Populate action is using the old template | Redo Part 2.2, then re-select the file (2.5) |
-| Purpose runs into the next section | No visible paragraph after the repeating section | Part 2.3 |
-| Some Purpose text missing | A control got the Hidden format along with the ¶ | Open the template, select the control, **Ctrl+D**, uncheck **Hidden**, then redo 2.2 selecting only the ¶ |
-| Purpose still fully struck and re-added | Mode isn't reaching the child flow | Check **Redline Purpose** → Mode = `Paragraph`. In the child run, **Is Paragraph** should take **True**. Check the key is `text_2` (3.1 step 4) |
-| Every Purpose edit shows as a full rewrite | **Aligned** is always False | Open the run → **KeptO** / **KeptP**. If they're empty, the sentences differ in quotes or spacing; check OriginalNorm/ProposedNorm run first. If counts differ, a sentence is duplicated |
-| Error in `range` | A `range()` got zero | Compare with 4.4 and 4.6. Those use the `take(range(…+1)…)` or `max(…,1)` guards |
-| Error "index out of range" in Gaps | KOB/KPB built wrong | Check KOB starts with `-1` and ends with the sentence count, e.g. `[-1, 0, 2, 4]` |
-| Words run together ("consumerand small") | Para Rows isn't adding spaces, or Respond still points at AllRows | Check 4.7 step 2, and Part 5 |
-| Pieces in the wrong order | Each Gap running in parallel | Each Gap → Settings → Concurrency Control **Off** |
-| Other sections changed too | Mode set on more than Redline Purpose | Clear Mode on the other Redline actions |
+| Purpose blank in the document | Populate still on the old field list, or the slots not mapped | Re-select the template file (7.3 step 1) and map all 16 |
+| "Click or tap here to enter text" in Purpose | A slot's placeholder wasn't cleared | Template: Design Mode → that control → `200B`, **Alt+X** |
+| Words run together ("consumerand") | Slot Text not adding spaces, or a mapping points at Padded instead | Check 4.4 step 1; the mappings read `Purpose_Slots` |
+| Red where yellow should be (or the reverse) | R and A styles swapped on a control | Run the checker (1.6); fix that control's Properties → Style |
+| Pieces in the wrong order | Slots out of order in the template, or Each Gap running in parallel | Checker (order); Each Gap → Concurrency **Off** |
+| Purpose fully struck and re-added on a small edit | Mode not reaching the child, or **Aligned** is False | Child run: **Is Paragraph** should be True. If **KeptO**/**KeptP** are empty, check the OriginalNorm/ProposedNorm outputs |
+| A small edit shows as the whole paragraph replaced | More than 5 separate changed spots (fallback) | Expected. Check **Fits** in the run |
+| `json()` error in Purpose Slots | Redline Purpose returned line rows (Mode blank) | Set Mode = `Paragraph` on Redline Purpose |
+| Error in `range` | Missing a `take(range(…+1)…)` or `max(…,1)` guard | Compare with 3.4 and 3.6 |
+| Index out of range in Gaps | KOB/KPB wrong | KOB should look like `[-1, 0, 2, 4]`: starts at -1, ends at the sentence count |
+| Other sections changed | Mode set on more than Redline Purpose | Clear Mode on the others |
+
+---
+
+## Appendix D — Spec for the template agent
+
+Give this section and both templates to the agent that edited your templates before.
+
+> **Task:** In each of `JD Change Template - User.docx` and `JD Change Template - HR.docx`, replace the Purpose redline row with 16 inline plain-text content controls.
+>
+> 1. Delete the block-level repeating section content control with Tag `PurposeRows`, including its child controls `PurposeKept`, `PurposeAdded`, `PurposeRemoved`. Leave one paragraph in its place, with the same paragraph and run formatting the Purpose text used (Arial 9).
+> 2. In that one paragraph, insert 16 **run-level (inline)** Plain Text content controls (`w:sdt` with `w:sdtPr/w:text`), directly one after another with no text between them, in this exact order:
+>    `PurposeK1 PurposeR1 PurposeA1 PurposeK2 PurposeR2 PurposeA2 PurposeK3 PurposeR3 PurposeA3 PurposeK4 PurposeR4 PurposeA4 PurposeK5 PurposeR5 PurposeA5 PurposeKEnd`
+> 3. For each control, set the Title (`w:alias`) and Tag (`w:tag`) both to its name.
+> 4. Styles (set via `w:sdtPr/w:rPr/w:rStyle`, which is the "Use a style to format text typed into the empty control" setting): every `PurposeR*` uses the existing character style `JDRemoved`; every `PurposeA*` uses `JDAdded`; the `PurposeK*` controls and `PurposeKEnd` use no character style.
+> 5. Each control's content is a single zero-width space (U+200B), so nothing prints when it's empty. Use the same style on that run as the control.
+> 6. None of the 16 controls may be inside a repeating section. The Purpose paragraph mark must not be hidden.
+> 7. Change nothing else in either document. Every other control, style, table and repeating section stays exactly as it is.
+> 8. Verify with `verify_purpose_slots.py`. Both files must report `RESULT: PASS (16/16 slots found)`.
+
+---
+
+## Appendix E — Undoing the earlier version
+
+Only needed if you made template changes from the earlier version (hidden paragraph marks):
+
+- **Templates:** Part 1.2 deletes the PurposeRows section along with its hidden mark, so there's nothing to undo there. If you made a hidden paragraph mark anywhere else, select the ¶ → **Ctrl+D** → uncheck **Hidden**. The checker warns if the Purpose paragraph mark is still hidden.
+- **Child flow:** if you built the earlier Part 4.6 Append steps (**Add Lead**, **Add Removed**, **Add Added**, **Add Tail**) and the **Segs** variable, delete them, and **Seg Rows** / **Para Rows** too. Everything up to and including **S** is the same in both versions.
