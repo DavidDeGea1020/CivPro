@@ -1,0 +1,8 @@
+"Before I put this together for HR, " &
+Switch(
+  CountRows(Filter(Topic.Followups, !IsBlank(Q))),
+  1, "one quick question",
+  2, "two quick questions",
+  "three quick questions"
+) &
+" so they have what they need."
