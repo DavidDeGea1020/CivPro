@@ -361,6 +361,39 @@ Open the **hr_note** branch (router guide 8.3). It currently saves the note, sen
 - **edit:** goes to editing as today. The follow-ups are already marked done, so after editing, the next review goes straight to the summary.
 - **The buttons:** Submit, Make more changes and Cancel work during follow-ups as they always have. Anything already answered is in ManagerNotes.
 
+### 6.4 Soft gate when Submit is clicked during follow-ups
+The buttons stay visible during follow-ups. Without this step, clicking **Submit to HR** sends the request without the answers, and before the manager has seen the summary. With it, the manager can answer the remaining questions or skip them. Skipped questions are logged for HR, and the summary is always shown before submitting.
+
+1. In the decision question, open the **Submit to HR** branch.
+2. Above its first node: **+** → **Add a condition** → **Edit formula** → `Topic.InFollowups = true`
+3. Move the existing submit nodes into the condition's **All other conditions** branch: **Cut/Paste** if your canvas offers it, otherwise recreate them there and delete the originals.
+
+**True branch:**
+
+4. **Set a variable value** → new variable `Remaining` (Topic) → **Formula**:
+   ```powerfx
+   CountRows(Filter(Topic.Followups, !IsBlank(Q))) - Topic.FUIndex + 1
+   ```
+5. **Ask a question** → message: `HR will likely need these to review your request. Want to answer the remaining {Topic.Remaining} question(s), or skip them and go to the summary?` → **Identify:** Multiple choice options → `Answer them`, `Skip to summary` → save as new variable `SkipChoice`.
+6. **Answer them** branch:
+   - **Set a variable value** → `Topic.Ask` → `Index(Topic.Followups, Topic.FUIndex).Q`
+   - **Go to step** → the decision question node
+7. **Skip to summary** branch:
+   - **Set a variable value** → `Global.ManagerNotes` → **Formula**:
+     ```powerfx
+     If(IsBlank(Global.ManagerNotes), "", Global.ManagerNotes & Char(10)) &
+     Concat(
+       Sequence(Topic.Remaining, Topic.FUIndex),
+       "- " & Index(Topic.Followups, Value).Q & " Answer: Not answered (skipped)",
+       Char(10)
+     )
+     ```
+   - **Set a variable value** → `Topic.InFollowups` → `false`
+   - **Go to step** → the **JD Final Review** tool node
+8. **Save**.
+
+> **Optional:** to log skipped questions when **Make more changes** is clicked during follow-ups too, add the step 7 ManagerNotes node at the top of that branch, inside a condition on `Topic.InFollowups = true`.
+
 ---
 
 ## Part 7 — Test
@@ -374,7 +407,7 @@ Use a new conversation for each row.
 | 3 | Same as 2 | "Not sure" to the first | Next question. ManagerNotes has "… Answer: Not answered" |
 | 4 | Same as 2 | "Why do you need that?" | A short explanation, then the same question in new words |
 | 5 | Same as 2 | "Good point, add that to the KSAs" | Goes to KSA editing. When done, the review shows the summary with **no** second round |
-| 6 | Same as 2 | Click **Submit to HR** at the first question | Submits. Any earlier answers are in ManagerNotes |
+| 6 | Same as 2 | Click **Submit to HR** at the first question | "…remaining N question(s)…" prompt. **Skip to summary** → skipped questions logged, then the summary. Submit from there |
 | 7 | Changes overlapping the next level up | Answer the overlap question | The overlap explanation shows in the HR summary and the HR email |
 | 8 | Discard during follow-ups, then start a new update | n/a | The new update can get follow-ups again (FollowupsDone was reset) |
 
