@@ -25,7 +25,7 @@
 1. [New global: FollowupsDone](#part-1--new-global-followupsdone)
 2. [JD Final Review: add the readiness check](#part-2--jd-final-review-add-the-readiness-check)
 3. [Review and Submit: pass the new inputs](#part-3--review-and-submit-pass-the-new-inputs)
-4. [Review and Submit: start the follow-ups](#part-4--review-and-submit-start-the-follow-ups)
+4. [Review and Submit: start the follow-ups](#part-4--review-and-submit-start-the-follow-ups) (start with 4.0)
 5. [JD Review Router: understand follow-up answers](#part-5--jd-review-router-understand-follow-up-answers)
 6. [Router branch: save answers and move to the next question](#part-6--router-branch-save-answers-and-move-to-the-next-question)
 7. [Test](#part-7--test)
@@ -201,8 +201,18 @@ follow-up answers.
 
 All of this goes **after** the `Topic.ReviewContext` node (router guide 5.2) and **before** the summary message node (router guide 5.3).
 
+### 4.0 Move the loop variables up first
+`Topic.Ask`, `Topic.Turns` and `Topic.QALog` are created below the summary message (router guide 5.4). A node can only select variables created **above** it, so move them up before building the follow-up branch.
+
+1. Find the three **Set a variable value** nodes directly below the summary message: `Ask` = `"What would you like to do?"`, `Turns` = `0`, `QALog` = `"None"`.
+2. Drag each one up to just **below the ReviewContext node**, keeping the order Ask, Turns, QALog.
+   - **If dragging doesn't work:** delete all three, then recreate them in the new spot as new **Topic** variables with the same names and values. Then reselect them anywhere they now show as missing (the router branches and the question node).
+3. **Save**.
+
+Moving them doesn't change behavior: the summary message doesn't use them, and they still run before the question on every path.
+
 ### 4.1 Read the follow-ups
-1. Below **ReviewContext**: **+** → **Set a variable value** → **Create a new variable** → `Followups` (Topic) → **Formula**:
+1. Below the **QALog** node you just moved: **+** → **Set a variable value** → **Create a new variable** → `Followups` (Topic) → **Formula**:
    ```powerfx
    ForAll(
      Table(Topic.F.followups),
@@ -232,23 +242,22 @@ All of this goes **after** the `Topic.ReviewContext` node (router guide 5.2) and
 4. **Set a variable value** → new variable `FUIndex` (Topic) → `1`
 5. **Send a message:**
    > Before I put this together for HR, a couple of quick questions so they have what they need.
-6. **Set a variable value** → `Topic.Ask` → **Formula**: `First(Topic.Followups).Q`
-7. **Set a variable value** → `Topic.Turns` → `0`
-8. **Set a variable value** → `Topic.QALog` → `"None"`
-9. **Topic management** → **Go to step** → click the **What would you like to do?** question node (the one showing `{Topic.Ask}`).
+6. **Set a variable value** → **Select a variable** → `Topic.Ask` → **Formula**: `First(Topic.Followups).Q`
+7. **Topic management** → **Go to step** → click the **What would you like to do?** question node (the one showing `{Topic.Ask}`).
 
 **All other conditions:** leave it empty. The topic continues to the summary message, exactly as today.
 
-> **Turns and QALog** are normally set just below the summary (router guide 5.4). The follow-up path skips the summary, so it sets them itself. If those two variables don't exist yet in your topic, finish router guide Part 5.4 first.
+> Turns and QALog were already reset in 4.0, above this branch, so the follow-up path doesn't need to set them again.
 
 ### 4.3 Check the order
 ```
 JD Final Review → Topic.F → title gate → SummaryText → ReviewContext
+→ Ask · Turns · QALog                      (moved up in 4.0)
 → Followups → NeedsInfo → InFollowups = false
 → Condition NeedsInfo
-     True:  FollowupsDone, InFollowups, FUIndex, intro message, Ask, Turns, QALog, Go to step → Question
+     True:  FollowupsDone, InFollowups, FUIndex, intro message, Ask = follow-up #1, Go to step → Question
      Else:  (empty)
-→ Summary message → Ask / Turns / QALog → Question
+→ Summary message → Question
 ```
 
 **Save** the topic.
@@ -419,4 +428,5 @@ Use a new conversation for each row.
 | `Index` error | FUIndex past the end of the list | Check the 6.2 step 5 condition runs before Ask is set |
 | Answers missing from the HR email | ManagerNotes not passed to the save flow | HR email guide 3.6 (ManagerNotes = `Global.ManagerNotes`) |
 | Summary appears before the follow-ups | The NeedsInfo condition is below the summary message | Move it above (4.3) |
+| A variable isn't listed in a Set variable node | It's created further down the canvas | Move the node that creates it above (see 4.0) |
 | Duplicate messages after submit | Outputs added to Review and Submit | This guide adds no outputs. Remove any that were added |
