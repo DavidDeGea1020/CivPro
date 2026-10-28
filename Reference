@@ -1,0 +1,1 @@
+if(contains(string(body('Get_reference')), '"$content"'), base64ToString(body('Get_reference')?['$content']), string(body('Get_reference')))
